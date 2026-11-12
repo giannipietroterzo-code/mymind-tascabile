@@ -1,6 +1,6 @@
 // MyMind tascabile · tiene l'app sul telefono anche senza rete (i dati no: quelli arrivano solo dal Mac, cifrati).
 // Prima la rete, poi la copia: un aggiornamento pubblicato si vede alla prima apertura con la rete.
-const V = "mmt-1.7";
+const V = "mmt-1.8";
 const FILE = ["./", "index.html", "stile.css", "icone.js", "tunnel.js", "app.js", "manifest.webmanifest", "icone/icona.svg", "icone/icona-192.png", "icone/icona-512.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(V).then((c) => c.addAll(FILE)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== V).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });

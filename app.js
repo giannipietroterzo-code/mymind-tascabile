@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const fmt = (n, d = 1) => Number(n).toLocaleString("it-IT", { maximumFractionDigits: d, minimumFractionDigits: d });
 const sizeTxt = (b) => b > 1e6 ? fmt(b / 1e6) + " MB" : Math.max(1, Math.round(b / 1e3)) + " kB";
-const pref = Object.assign({ tema: "auto", stile: "atelier", web: false, modelli: {}, recenti: [] }, JSON.parse(localStorage.getItem("mmt.pref") || "{}"));
+const pref = Object.assign({ tema: "auto", web: false, modelli: {}, recenti: [] }, JSON.parse(localStorage.getItem("mmt.pref") || "{}"));
 const savePref = () => localStorage.setItem("mmt.pref", JSON.stringify(pref));
 function ago(t) {
   if (!t) return "";
@@ -31,9 +31,6 @@ function applicaTema() {
   document.documentElement.dataset.theme = scuro ? "dark" : "light";
 }
 applicaTema(); matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applicaTema);
-const STILI_TEL = { atelier: "Atelier", mecha: "Mecha" };   // Mecha: angoli smussati, titoli stretti, oro-giallo (come sul Mac)
-const applicaStile = () => { document.documentElement.dataset.stile = STILI_TEL[pref.stile] ? pref.stile : "atelier"; };
-applicaStile();
 
 // ================================================================ foglio dal basso (scelte, conferme, anteprime)
 function sheet(html, cls = "") {
@@ -250,7 +247,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.7";
+const VERSIONE = "1.8";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -418,12 +415,10 @@ function casa() {
 function menu() {
   const s = sheet(`<div class="menu">
     <button data-m="tema">${svg(document.documentElement.dataset.theme === "dark" ? "sun" : "moon")}<span><b>Tema</b><small>${{ auto: "Come il telefono", light: "Chiaro", dark: "Scuro" }[pref.tema]}</small></span></button>
-    <button data-m="stile">${svg("layers")}<span><b>Stile</b><small>${STILI_TEL[pref.stile] || "Atelier"} · tocca per cambiare</small></span></button>
     <button data-m="blocca">${svg("key")}<span><b>Blocca adesso</b><small>Al prossimo avvio serve il PIN</small></span></button>
     <button data-m="pin">${svg("edit")}<span><b>Cambia PIN</b><small>La chiave resta la stessa</small></span></button>
     <button data-m="via" class="danger">${svg("trash")}<span><b>Dimentica questo telefono</b><small>Cancella la chiave da qui. Sul Mac revocalo in Impostazioni.</small></span></button></div>`);
   s.querySelector('[data-m="tema"]').onclick = () => { pref.tema = { auto: "light", light: "dark", dark: "auto" }[pref.tema]; savePref(); applicaTema(); closeSheet(); };
-  s.querySelector('[data-m="stile"]').onclick = () => { pref.stile = pref.stile === "mecha" ? "atelier" : "mecha"; savePref(); applicaStile(); closeSheet(); };
   s.querySelector('[data-m="blocca"]').onclick = () => { closeSheet(); blocca(); };
   s.querySelector('[data-m="pin"]').onclick = () => { closeSheet(); const sec = A.sec; pinPad({ titolo: "Nuovo PIN", sotto: "Sei cifre.", onPin: async (p) => { await Cassa.chiudi(p, sec); toast("PIN cambiato"); casa(); } }); };
   s.querySelector('[data-m="via"]').onclick = async () => { closeSheet(); if (await ask("Cancello la chiave da questo telefono? Per tornare a usarlo serve un nuovo abbinamento dal Mac.", "Dimentica", true)) { Cassa.cancella(); Tunnel.ferma(); A.sec = null; nessunAbbinamento(); } };
