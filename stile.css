@@ -313,3 +313,13 @@ img.rotta { opacity: .2; }
 .ver.nuova { color: var(--on-ws); background: var(--ws); border-color: var(--ws); animation: pulsa 2s ease-in-out 3; }
 .lock-top h1 .ver { position: relative; top: -3px; }
 .brand { min-width: 0; } .brand b, .brand svg, .ver { flex: none; }
+
+/* ---------- testata separata dal contenuto: fascia pannello, filo sotto, ombra corta */
+.home .top, .testa { background: color-mix(in srgb, color-mix(in srgb, var(--panel) 65%, var(--panel-2)) 96%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, var(--faint));
+  box-shadow: 0 10px 24px -18px rgba(40, 25, 5, .45); }
+[data-theme="dark"] .home .top, [data-theme="dark"] .testa { box-shadow: 0 10px 24px -14px rgba(0, 0, 0, .8); }
+.testa { flex: none; position: relative; z-index: 4; padding-bottom: 10px; }
+.testa .top { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.testa .tabs { margin-bottom: 0; }
+.wsv #corpo { padding-top: 12px; }
+.home .hero { padding-top: 20px; }

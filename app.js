@@ -247,7 +247,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.5";
+const VERSIONE = "1.6";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -440,8 +440,8 @@ async function apriWs(id, tab = "chat") {
 function schermoWs() {
   const w = ws();
   $("app").innerHTML = `<div class="wsv">
-    <header class="top ws"><button class="ib" id="indietro">${svg("left")}</button>${tile(w)}<div class="tt"><b>${esc(w.nome)}</b><small id="sottoWs">${isSpecial() ? w.sotto : `${w.fonti || 0} fonti`}</small></div><button class="mchip" id="mchip"></button></header>
-    ${isSpecial() ? "" : `<nav class="tabs" id="tabs">${[["chat", "Chat"], ["nota", "Nota"], ["fonti", "Fonti"]].map(([k, l]) => `<button data-t="${k}" class="${A.tab === k ? "on" : ""}">${svg(k === "chat" ? "chat" : k === "nota" ? "note" : "files")}${l}</button>`).join("")}</nav>`}
+    <div class="testa"><header class="top ws"><button class="ib" id="indietro">${svg("left")}</button>${tile(w)}<div class="tt"><b>${esc(w.nome)}</b><small id="sottoWs">${isSpecial() ? w.sotto : `${w.fonti || 0} fonti`}</small></div><button class="mchip" id="mchip"></button></header>
+    ${isSpecial() ? "" : `<nav class="tabs" id="tabs">${[["chat", "Chat"], ["nota", "Nota"], ["fonti", "Fonti"]].map(([k, l]) => `<button data-t="${k}" class="${A.tab === k ? "on" : ""}">${svg(k === "chat" ? "chat" : k === "nota" ? "note" : "files")}${l}</button>`).join("")}</nav>`}</div>
     <main id="corpo"></main>
     <div id="composer"></div></div>`;
   $("indietro").onclick = () => history.back();
