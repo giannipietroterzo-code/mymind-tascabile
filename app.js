@@ -119,6 +119,15 @@ function tex(src) {
 }
 // una formula $$ … $$ o \[ … \] su più righe: la riporto su una riga sola prima di dividere il testo in righe
 const unisciFormule = (t) => t.replace(/\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]/g, (m, a, b) => `$$${(a ?? b).replace(/\s*\n\s*/g, " ")}$$`);
+// `…` è codice solo se lo sembra davvero (=, parentesi di funzione, percorsi, file.ext, byte esadecimali, snake_case…):
+// «RESET», «DC INPUT», «45,5 V» sono etichette e restano nel carattere del testo, senza il riquadro in monospace
+function sembraCodice(t) {
+  const x = t.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  if (/^[<>≤≥]=?\s?[\d.,]+\s?[a-zA-Zµ%°]*$/.test(x)) return false;      // «< 50 ms», «> 3 s»
+  return /[=\\{}\[\];$#@|&_"'`]|->|=>|::|[<>](?!=?\s?[\d.,])|^>|~\//.test(x)
+    || /^(git|npm|npx|pip3?|python3?|node|brew|cd|ls|curl|sudo|ssh|docker|chmod|open|swiftc)\s/.test(x) || /\w\(/.test(x) || /(^|\s)[.~]?\/\w|\w\/[\w-]+\.\w+/.test(x)
+    || /\w\.[a-z]{2,5}\b/.test(x) || /[a-z]{2,}[A-Z][a-z]/.test(x) || /^-{1,2}[a-z]/.test(x) || /^([0-9A-F]{2}\s){3,}/.test(x);
+}
 function inline(s) {
   // «\.» «\*» e simili del Markdown: il carattere va mostrato com'è, senza barra e senza formattare
   const kept = [], formule = [];
@@ -127,7 +136,7 @@ function inline(s) {
     formule.push(tex(a ?? b ?? c)); return `\u0002${formule.length - 1}\u0002`;
   }).replace(/\\([\\`*_{}\[\]()#+\-.!|>~])/g, (_, c) => { kept.push(c); return `\u0001${kept.length - 1}\u0001`; });
   return esc(s)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/`([^`]+)`/g, (_, c) => sembraCodice(c) ? `<code>${c}</code>` : `<span class="etic">${c}</span>`)
     .replace(/\*\*(\S(?:.*?\S)??)\*\*(?!\*)/g, "<strong>$1</strong>")
     .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>")
     .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
@@ -200,7 +209,7 @@ function renderMd(src) {
         voce(m[1].length, "ol", +m[2], inline(m[3]));
       } else if ((m = line.match(/^#{1,6}\s+(.*)/))) {
         flushP(); flushL(); out.push(`<h3>${inline(m[1])}</h3>`);
-      } else if ((m = line.match(/^>\s?(.*)/))) {
+      } else if ((m = line.match(/^\s*>\s?(.*)/))) {
         flushP(); flushL(); out.push(`<blockquote>${inline(m[1])}</blockquote>`);
       } else if (/^(-{3,}|\*{3,})$/.test(line.trim())) {
         flushP(); flushL(); out.push("<hr>");
@@ -235,6 +244,37 @@ const COLORI_FORNITORE = { Anthropic: "#c15f3c", Google: "#188038", Mistral: "#d
 const TIPO_IC = { pdf: "pdf", foto: "image", documento: "doc", testo: "file", altro: "file" };
 const LAVORA = ["in coda", "leggo", "descrivo la foto", "calcolo i vettori", "do un nome"];
 const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|online|in rete)\b|\bsul web\b|\bnotizie\b/i;
+// ---------------------------------------------------------------- versione e aggiornamento automatico
+// strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
+// se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
+const VERSIONE = "1.3";
+let nuovaVersione = null;
+async function controllaVersione() {
+  if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
+  try {
+    const r = await fetch(`versione.json?t=${Date.now()}`, { cache: "no-store" });
+    const v = r.ok && (await r.json()).v;
+    if (!v || v === VERSIONE) return;
+    nuovaVersione = v;
+    if (!A.sec && sessionStorage.getItem("mmt-agg") !== v) return aggiorna();
+    document.querySelectorAll(".ver").forEach(mostraVersione);
+  } catch { /* senza rete: riprovo la prossima volta */ }
+}
+function aggiorna() {
+  if (sessionStorage.getItem("mmt-agg") === nuovaVersione) return;   // già provato: niente giri infiniti se la cache è indietro
+  sessionStorage.setItem("mmt-agg", nuovaVersione);
+  location.reload();
+}
+function mostraVersione(el) {
+  el.classList.toggle("nuova", !!nuovaVersione);
+  el.innerHTML = nuovaVersione ? `↻ ${esc(nuovaVersione)}` : `v${VERSIONE}`;
+  el.title = nuovaVersione ? `Versione ${nuovaVersione} pronta: tocca per aggiornare (hai la ${VERSIONE})` : "";
+  el.onclick = nuovaVersione ? () => { if (!A.busy || confirm("Sta ancora rispondendo: aggiorno lo stesso?")) aggiorna(); } : null;
+}
+const versioneHtml = () => `<button class="ver"></button>`;
+setInterval(controllaVersione, 15 * 60e3);
+new MutationObserver(() => document.querySelectorAll(".ver:empty").forEach(mostraVersione)).observe(document.documentElement, { childList: true, subtree: true });
+
 const A = {
   sec: null, srv: {}, wss: [], modelli: [], wid: null, tab: "chat", chats: [], chat: null, fonti: [], nota: null,
   busy: false, ctrl: null, pins: [], foto: [], filtro: "tutte", cerca: "", macOk: null, nascosto: 0, notaEdit: false,
@@ -269,7 +309,7 @@ function leggiAbbinamento() {
 function pinPad({ titolo, sotto, onPin, extra = "" }) {
   let pin = "";
   $("app").innerHTML = `<div class="lock">
-    <div class="lock-top"><div class="logo-big">${LOGO}</div><h1>${titolo}</h1><p id="pinSub">${sotto}</p></div>
+    <div class="lock-top"><div class="logo-big">${LOGO}</div><h1>${titolo}${titolo === "MyMind" ? versioneHtml() : ""}</h1><p id="pinSub">${sotto}</p></div>
     <div class="dots" id="dots">${"<i></i>".repeat(6)}</div>
     <div class="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, "", 0, "⌫"].map((k) => k === "" ? "<span></span>" : `<button data-k="${k}">${k === "⌫" ? svg("left") : k}</button>`).join("")}</div>
     ${extra}</div>`;
@@ -339,14 +379,16 @@ function dipingiStato() {
   el.className = "stato " + cls; el.innerHTML = `<i></i>${txt}`;
 }
 function blocca() {
+  if (nuovaVersione) return aggiorna();      // si richiudeva comunque: è il momento giusto per la versione nuova
   Tunnel.ferma(); A.sec = null; A.chat = null; A.wid = null;
   blobs.forEach((u) => URL.revokeObjectURL(u)); blobs.clear();
   sblocca();
 }
 // dopo 5 minuti in sottofondo l'app si richiude: chi prende il telefono sbloccato non trova MyMind aperto
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) A.nascosto = Date.now();
-  else if (A.sec && A.nascosto && Date.now() - A.nascosto > 5 * 60e3 && !A.busy) blocca();
+  if (document.hidden) { A.nascosto = Date.now(); return; }
+  if (A.sec && A.nascosto && Date.now() - A.nascosto > 5 * 60e3 && !A.busy) blocca();
+  controllaVersione();
 });
 
 // ================================================================ casa: i workspace
@@ -356,7 +398,7 @@ function casa() {
   A.wid = null; A.chat = null; tinta("#c15f3c");
   const err = A.macOk === 0 ? `<div class="banner bad">${svg("power")}<div><b>Il Mac non risponde.</b> ${esc(A.macErr || "")} Deve essere acceso, sveglio e con MyMind avviato.<button class="btn sm" id="riprova">Riprova</button></div></div>` : "";
   $("app").innerHTML = `<div class="home">
-    <header class="top"><div class="brand">${LOGO}<b>MyMind</b></div><span id="stato" class="stato"></span><button class="ib" id="menu">${svg("dots")}</button></header>
+    <header class="top"><div class="brand">${LOGO}<b>MyMind</b>${versioneHtml()}</div><span id="stato" class="stato"></span><button class="ib" id="menu">${svg("dots")}</button></header>
     <section class="hero"><h1>${saluto()}</h1><p>${new Date().toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}</p>
       <form class="askall" id="askall"><span>${svg("layers")}</span><input id="askq" placeholder="Chiedi a tutti i workspace…" enterkeyhint="send" autocomplete="off"><button class="ib main" aria-label="Chiedi">${svg("up")}</button></form></section>
     ${err}
@@ -861,3 +903,4 @@ function avvio() {
 }
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 avvio();
+controllaVersione();

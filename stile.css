@@ -310,3 +310,8 @@ details.think div { white-space: pre-wrap; padding: 8px 0 0 12px; border-left: 2
 img.rotta { opacity: .2; }
 @media (min-width: 700px) { .wsv { max-width: 720px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); } }
 .md sup:not(.cite), .md sub { font-size: .72em; line-height: 0; }
+.md .etic { font-size: .9em; font-weight: 600; letter-spacing: .015em; padding: .1em .4em; border-radius: 5px; background: var(--panel-2); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.ver { font: 600 11px/1 var(--sans); color: var(--faint); padding: 4px 7px; border-radius: 99px; border: 1px solid var(--line); margin-left: 8px; vertical-align: middle; letter-spacing: .02em; white-space: nowrap; }
+.ver.nuova { color: var(--on-ws); background: var(--ws); border-color: var(--ws); animation: pulsa 2s ease-in-out 3; }
+.lock-top h1 .ver { position: relative; top: -3px; }
+.brand { min-width: 0; } .brand b, .brand svg, .ver { flex: none; }
