@@ -1,5 +1,5 @@
 /* MyMind tascabile · toni Atelier (avorio, oro brunito, antracite) e l'accento del workspace in --ws.
-   Superfici piatte, bordi netti, titoli in serif come sul Mac. Pensato per il pollice: tutto ciò che si tocca è ≥ 44 px. */
+   Superfici piatte, bordi netti, titoli e testo nello stesso sans di sistema. Pensato per il pollice: tutto ciò che si tocca è ≥ 44 px. */
 :root {
   --ws: #c15f3c; --on-ws: #fff;
   --bg: #f6f1e7; --panel: #fffdf8; --panel-2: #efe7d8; --line: #e3d8c4; --text: #161412; --muted: #6b645a; --faint: #a39b8e;
@@ -54,7 +54,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 /* ---------- blocco col PIN */
 .lock { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 26px calc(28px + var(--safe-b)); text-align: center;
   background: radial-gradient(120% 60% at 50% 0%, color-mix(in srgb, #c15f3c 9%, var(--bg)), var(--bg) 70%); }
-.lock-top h1 { font: 600 30px/1.15 var(--serif); margin: 18px 0 8px; letter-spacing: -.01em; }
+.lock-top h1 { font: 600 30px/1.15 var(--sans); margin: 18px 0 8px; letter-spacing: -.02em; }
 .lock-top p { color: var(--muted); margin: 0 auto; max-width: 320px; font-size: 15px; min-height: 45px; }
 .lock-top p.bad { color: var(--bad); }
 .logo-big svg { width: 76px; height: 76px; display: block; margin: 0 auto; filter: drop-shadow(0 8px 22px rgba(193, 95, 60, .25)); }
@@ -77,7 +77,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 /* ---------- barra in alto */
 .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
   background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-.brand { display: flex; align-items: center; gap: 10px; font: 600 20px var(--serif); flex: 1; }
+.brand { display: flex; align-items: center; gap: 10px; font: 600 20px var(--sans); flex: 1; }
 .brand svg { width: 34px; height: 34px; }
 .stato { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 6px 11px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); }
 .stato i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
@@ -89,7 +89,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 .top.ws .tile { width: 36px; height: 36px; border-radius: 11px; }
 .top.ws .tile svg.i { width: 19px; height: 19px; }
 .top .tt { flex: 1; min-width: 0; line-height: 1.2; }
-.top .tt b { display: block; font: 600 17px var(--serif); letter-spacing: -.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top .tt b { display: block; font: 600 17px var(--sans); letter-spacing: -.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .top .tt small { color: var(--muted); font-size: 12px; }
 .mchip { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 8px 0 10px; border-radius: 99px; background: none; border: 1px solid var(--line); font-size: 12.5px; font-weight: 600; color: var(--muted); max-width: 34vw; white-space: nowrap; overflow: hidden; flex: none; }
 .mchip > span { overflow: hidden; text-overflow: ellipsis; }
@@ -110,7 +110,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 .card::after { content: ""; position: absolute; inset: auto -20px -40px auto; width: 90px; height: 90px; border-radius: 50%; background: var(--c); opacity: .09; }
 .card:active { transform: scale(.97); }
 .card .tile { margin-bottom: 10px; }
-.card b { font: 600 16.5px/1.2 var(--serif); }
+.card b { font: 600 16.5px/1.2 var(--sans); }
 .card small { color: var(--muted); font-size: 12.5px; }
 .card.sk { background: linear-gradient(100deg, var(--panel) 30%, var(--panel-2) 50%, var(--panel) 70%) 0 0 / 300% 100%; animation: luccica 1.4s infinite; }
 @keyframes luccica { to { background-position: -150% 0; } }
@@ -138,7 +138,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 .chats .welcome { text-align: center; padding: 26px 6px 8px; }
 .welcome .tile { width: 54px; height: 54px; border-radius: 17px; margin: 0 auto 14px; }
 .welcome .tile svg.i { width: 27px; height: 27px; }
-.welcome h2 { font: 600 22px/1.25 var(--serif); margin: 0 auto 18px; max-width: 300px; }
+.welcome h2 { font: 600 22px/1.25 var(--sans); margin: 0 auto 18px; max-width: 300px; }
 .sugg { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .sugg button { padding: 9px 14px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); font-size: 14px; }
 .sugg button:active { background: var(--ws-soft); border-color: var(--ws-line); }
@@ -248,7 +248,7 @@ details.think div { white-space: pre-wrap; padding: 8px 0 0 12px; border-left: 2
 .nhead { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 13px; margin-bottom: 10px; }
 .nhead span { display: inline-flex; align-items: center; gap: 6px; } .nhead svg.i { width: 16px; height: 16px; }
 .carta { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 18px 20px; }
-.carta h3 { font: 600 19px/1.3 var(--serif); color: var(--ws-text); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.carta h3 { font: 600 19px/1.3 var(--sans); color: var(--ws-text); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .carta h3:first-child { margin-top: 0; }
 .nota.edit { display: flex; flex-direction: column; height: 100%; }
 .nota.edit textarea { flex: 1; min-height: 60vh; width: 100%; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); padding: 14px; font: 14.5px/1.55 var(--mono); outline: 0; resize: none; }
@@ -276,13 +276,13 @@ details.think div { white-space: pre-wrap; padding: 8px 0 0 12px; border-left: 2
 #sheet.tall { min-height: 70dvh; }
 #sheet.full { padding: 8px 8px calc(12px + var(--safe-b)); background: #000; }
 .grip { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 14px; }
-.sh { display: flex; align-items: center; gap: 9px; font: 600 19px/1.3 var(--serif); margin: 4px 0 12px; word-break: break-word; }
+.sh { display: flex; align-items: center; gap: 9px; font: 600 19px/1.3 var(--sans); margin: 4px 0 12px; word-break: break-word; }
 .sh small { color: var(--muted); font: 13px var(--sans); }
 .sh .num { min-width: 26px; height: 26px; border-radius: 8px; background: var(--ws-soft); color: var(--ws-text); display: grid; place-items: center; font: 700 13px var(--sans); flex: none; }
 .ask { font-size: 16px; margin: 8px 2px 0; }
 .field { width: 100%; height: 50px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); padding: 0 14px; font-size: 16px; outline: 0; }
 .field:focus { border-color: var(--ws-line); }
-.estratto { margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--bg); border-left: 3px solid var(--ws); font: 14.5px/1.55 var(--serif); white-space: pre-wrap; max-height: 45dvh; overflow-y: auto; }
+.estratto { margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--bg); border-left: 3px solid var(--ws); font: 14.5px/1.55 var(--sans); white-space: pre-wrap; max-height: 45dvh; overflow-y: auto; }
 .models, .menu { display: grid; gap: 6px; }
 .models button, .menu button { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 15px; text-align: left; border: 1px solid transparent; }
 .models button.on { background: var(--ws-soft); border-color: var(--ws-line); }
@@ -294,7 +294,7 @@ details.think div { white-space: pre-wrap; padding: 8px 0 0 12px; border-left: 2
 .menu button > svg.i { color: var(--muted); } .menu .danger, .menu .danger svg.i { color: var(--bad); }
 .fprev { min-height: 160px; max-height: 46dvh; border-radius: 16px; background: var(--bg); display: grid; place-items: center; overflow: hidden; color: var(--muted); }
 .fprev img { width: 100%; max-height: 46dvh; object-fit: contain; display: block; }
-.ftxt { align-self: start; width: 100%; max-height: 46dvh; overflow-y: auto; padding: 14px; white-space: pre-wrap; font: 13.5px/1.55 var(--serif); color: var(--text); }
+.ftxt { align-self: start; width: 100%; max-height: 46dvh; overflow-y: auto; padding: 14px; white-space: pre-wrap; font: 13.5px/1.55 var(--sans); color: var(--text); }
 .fbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .zoom { width: 100%; max-height: 82dvh; object-fit: contain; display: block; border-radius: 14px; }
 
