@@ -93,17 +93,47 @@ function pompa() {
 }
 
 // ================================================================ testo formattato (lo stesso della pagina del Mac)
+// Formule LaTeX ($\rightarrow$, $m^2$, $\frac{a}{b}$, \( … \), $$ … $$): diventano simboli e apici veri, senza librerie
+const TEX = { rightarrow: "→", to: "→", longrightarrow: "⟶", leftarrow: "←", gets: "←", Rightarrow: "⇒", implies: "⇒", Leftarrow: "⇐",
+  leftrightarrow: "↔", Leftrightarrow: "⇔", iff: "⇔", uparrow: "↑", downarrow: "↓", mapsto: "↦", times: "×", cdot: "·", div: "÷", pm: "±",
+  mp: "∓", approx: "≈", simeq: "≃", sim: "∼", equiv: "≡", neq: "≠", ne: "≠", le: "≤", leq: "≤", ge: "≥", geq: "≥", ll: "≪", gg: "≫",
+  propto: "∝", infty: "∞", degree: "°", circ: "∘", partial: "∂", nabla: "∇", sum: "∑", prod: "∏", int: "∫", in: "∈", notin: "∉",
+  subset: "⊂", cup: "∪", cap: "∩", forall: "∀", exists: "∃", neg: "¬", land: "∧", lor: "∨", ldots: "…", dots: "…", cdots: "⋯",
+  checkmark: "✓", euro: "€", alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε", varepsilon: "ε", eta: "η", theta: "θ",
+  lambda: "λ", mu: "μ", pi: "π", rho: "ρ", sigma: "σ", tau: "τ", phi: "φ", varphi: "φ", omega: "ω", Gamma: "Γ", Delta: "Δ",
+  Theta: "Θ", Lambda: "Λ", Pi: "Π", Sigma: "Σ", Phi: "Φ", Omega: "Ω", left: "", right: "", big: "", Big: "", displaystyle: "",
+  quad: " ", qquad: "  ", ",": " ", ";": " ", ":": " ", "!": "", " ": " ", "%": "%", $: "$", "&amp;": "&", "#": "#", _: "_", "{": "{", "}": "}" };
+function tex(src) {
+  const par = (x) => /^[\w.^]+$/.test(x.trim()) ? x.trim() : `(${x.trim()})`, g = String.raw`\{([^{}]*)\}`;
+  let s = esc(src.trim());
+  for (let i = 0; i < 3; i++) s = s   // tre giri: bastano per \frac dentro \text e simili
+    .replace(new RegExp(String.raw`\\(?:text|mathrm|mathbf|textbf|mathit|operatorname|mbox)\s*` + g, "g"), "$1")
+    .replace(new RegExp(String.raw`\\[dt]?frac\s*` + g + String.raw`\s*` + g, "g"), (_, a, b) => `${par(a)}⁄${par(b)}`)
+    .replace(new RegExp(String.raw`\\sqrt\s*` + g, "g"), "√$1");
+  return `<span class="tex">${s
+    .replace(/\^\s*\{?\\circ\}?/g, "°")
+    .replace(/\\([a-zA-Z]+|&amp;|[,;:! %$#_{}])/g, (m, c) => c in TEX ? TEX[c] : c)
+    .replace(/\^\{([^{}]*)\}|\^([^\s{}])/g, (_, a, b) => `<sup>${a ?? b}</sup>`)
+    .replace(/_\{([^{}]*)\}|_([A-Za-z0-9])/g, (_, a, b) => `<sub>${a ?? b}</sub>`)
+    .replace(/[{}]/g, "")}</span>`;
+}
+// una formula $$ … $$ o \[ … \] su più righe: la riporto su una riga sola prima di dividere il testo in righe
+const unisciFormule = (t) => t.replace(/\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]/g, (m, a, b) => `$$${(a ?? b).replace(/\s*\n\s*/g, " ")}$$`);
 function inline(s) {
   // «\.» «\*» e simili del Markdown: il carattere va mostrato com'è, senza barra e senza formattare
-  const kept = [];
-  s = String(s ?? "").replace(/\\([\\`*_{}\[\]()#+\-.!|>~])/g, (_, c) => { kept.push(c); return `\u0001${kept.length - 1}\u0001`; });
+  const kept = [], formule = [];
+  s = String(s ?? "").replace(/\$\$(.+?)\$\$|\\\((.+?)\\\)|\$(?=\S)([^$\n]*?[^\s$])\$(?!\d)/g, (m, a, b, c) => {
+    if (c != null && !/[\\^_]/.test(c)) return m;      // «costa 5$ o 10$»: niente barre né apici, non è una formula
+    formule.push(tex(a ?? b ?? c)); return `\u0002${formule.length - 1}\u0002`;
+  }).replace(/\\([\\`*_{}\[\]()#+\-.!|>~])/g, (_, c) => { kept.push(c); return `\u0001${kept.length - 1}\u0001`; });
   return esc(s)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*\*(\S(?:.*?\S)??)\*\*(?!\*)/g, "<strong>$1</strong>")
     .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>")
     .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/(^|[^\w\]>])\[(\d{1,2})\](?!\()/g, '$1<sup class="cite" data-n="$2">$2</sup>')
-    .replace(/\u0001(\d+)\u0001/g, (_, i) => esc(kept[+i]));
+    .replace(/\u0001(\d+)\u0001/g, (_, i) => esc(kept[+i]))
+    .replace(/\u0002(\d+)\u0002/g, (_, i) => formule[+i]);
 }
 const KW = new Set("function return const let var if else for while do switch case break continue class def import from export default async await new try catch finally throw in of is not and or True False None true false null undefined self this lambda with as elif pass yield interface type public private static void int float string bool fn mut struct impl use pub enum match package func echo then fi done local".split(" "));
 function highlight(code, lang) {
@@ -134,14 +164,29 @@ function renderMd(src) {
     }
     let list = null, para = [], table = null;
     const flushP = () => { if (para.length) { out.push("<p>" + para.map(inline).join("<br>") + "</p>"); para = []; } };
-    const flushL = () => { if (list) { out.push(`<${list.tag}${list.start > 1 ? ` start="${list.start}"` : ""}>${list.items.join("")}</${list.tag}>`); list = null; } };
+    // liste annidate vere: ogni voce può avere una sottolista (rientro maggiore), così i sottopunti non prendono un numero
+    let pila = [];
+    const listaHtml = (l) => `<${l.tag}${l.start > 1 ? ` start="${l.start}"` : ""}>${l.items.map((it) => `<li>${it.h}${it.kids ? listaHtml(it.kids) : ""}</li>`).join("")}</${l.tag}>`;
+    const flushL = () => { if (list) { out.push(listaHtml(list)); list = null; pila = []; } };
+    const voce = (ind, tag, start, h) => {
+      while (pila.length > 1 && ind < pila.at(-1).ind) pila.pop();
+      let top = pila.at(-1);
+      if (top && ind > top.ind && top.items.length) {
+        const ultima = top.items.at(-1);
+        if (!ultima.kids || ultima.kids.tag !== tag) ultima.kids = { tag, start, ind, items: [] };
+        pila.push(top = ultima.kids);
+      } else if (!top || (pila.length === 1 && top.tag !== tag)) {
+        flushL(); list = top = { tag, start, ind, items: [] }; pila = [list];
+      }
+      top.items.push({ h, kids: null });
+    };
     const flushT = () => {
       if (!table) return;
       const rows = table.filter((r) => !/^\s*\|?\s*:?-{2,}/.test(r));
       out.push("<table>" + rows.map((r, ri) => "<tr>" + r.replace(/^\s*\||\|\s*$/g, "").split("|").map((c) => ri ? `<td>${inline(c.trim())}</td>` : `<th>${inline(c.trim())}</th>`).join("") + "</tr>").join("") + "</table>");
       table = null;
     };
-    for (const raw of part.split("\n")) {
+    for (const raw of unisciFormule(part).split("\n")) {
       const line = raw.replace(/\s+$/, "");
       let m;
       if (/^\s*\|.*\|\s*$/.test(line)) { flushP(); flushL(); (table = table || []).push(line); continue; }
@@ -149,14 +194,10 @@ function renderMd(src) {
       if (!line.trim()) { flushP(); flushL(); continue; }
       if ((m = line.match(/^(\s*)[-*•+]\s+(.*)/))) {
         flushP();
-        if (list && list.tag !== "ul" && !m[1].length) flushL();
-        if (!list) list = { tag: "ul", items: [] };
-        list.items.push(`<li${m[1].length >= 2 ? ' class="sub"' : ""}>${inline(m[2])}</li>`);
+        voce(m[1].length, "ul", 1, inline(m[2]));
       } else if ((m = line.match(/^(\s*)(\d+)[.)]\s+(.*)/))) {
         flushP();
-        if (list && list.tag !== "ol") flushL();
-        if (!list) list = { tag: "ol", items: [], start: +m[2] };
-        list.items.push(`<li>${inline(m[3])}</li>`);
+        voce(m[1].length, "ol", +m[2], inline(m[3]));
       } else if ((m = line.match(/^#{1,6}\s+(.*)/))) {
         flushP(); flushL(); out.push(`<h3>${inline(m[1])}</h3>`);
       } else if ((m = line.match(/^>\s?(.*)/))) {
@@ -370,7 +411,7 @@ function schermoWs() {
 }
 function disegnaChip() {
   const m = modello(), el = $("mchip"); if (!el) return;
-  el.innerHTML = m ? `<i${pc(m)}></i>${esc(shortName(m).replace(/^Claude /, ""))}${svg("chev")}` : "nessun modello";
+  el.innerHTML = m ? `<i${pc(m)}></i><span>${esc(shortName(m).replace(/^Claude /, ""))}</span>${svg("chev")}` : "nessun modello";
 }
 function sceltaModello() {
   const cur = modello();
