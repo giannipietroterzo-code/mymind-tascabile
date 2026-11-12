@@ -247,7 +247,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.4";
+const VERSIONE = "1.5";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -392,14 +392,13 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // ================================================================ casa: i workspace
-function saluto() { const h = new Date().getHours(); return h < 5 ? "Buonanotte" : h < 13 ? "Buongiorno" : h < 18 ? "Buon pomeriggio" : "Buonasera"; }
 function tile(w) { return `<span class="tile" style="--c:${esc(w.colore)}">${svg(SPECIALI[w.id] ? w.icona : "ws_" + w.icona)}</span>`; }
 function casa() {
   A.wid = null; A.chat = null; tinta("#c15f3c");
   const err = A.macOk === 0 ? `<div class="banner bad">${svg("power")}<div><b>Il Mac non risponde.</b> ${esc(A.macErr || "")} Deve essere acceso, sveglio e con MyMind avviato.<button class="btn sm" id="riprova">Riprova</button></div></div>` : "";
   $("app").innerHTML = `<div class="home">
     <header class="top"><div class="brand">${LOGO}<b>MyMind</b>${versioneHtml()}</div><span id="stato" class="stato"></span><button class="ib" id="menu">${svg("dots")}</button></header>
-    <section class="hero"><h1>${saluto()}</h1><p>${new Date().toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}</p>
+    <section class="hero">
       <form class="askall" id="askall"><span>${svg("layers")}</span><input id="askq" placeholder="Chiedi a tutti i workspace…" enterkeyhint="send" autocomplete="off"><button class="ib main" aria-label="Chiedi">${svg("up")}</button></form></section>
     ${err}
     <div class="lab">I tuoi workspace</div>

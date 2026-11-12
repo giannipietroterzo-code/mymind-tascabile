@@ -99,9 +99,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 /* ---------- casa */
 .home { padding: 0 16px calc(30px + var(--safe-b)); max-width: 640px; margin: 0 auto; }
 .home .top { margin: 0 -16px; padding-left: 16px; padding-right: 8px; }
-.hero h1 { font: 600 34px/1.1 var(--serif); margin: 18px 4px 4px; letter-spacing: -.015em; }
-.hero p { margin: 0 4px 18px; color: var(--muted); }
-.hero p::first-letter { text-transform: uppercase; }
+.hero { padding-top: 14px; }
 .askall { display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 14px; border-radius: 20px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 1px 0 rgba(0,0,0,.03); }
 .askall > span { color: #8c7449; display: grid; }
 .askall input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-size: 16px; padding: 10px 4px; }
