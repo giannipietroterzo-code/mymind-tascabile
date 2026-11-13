@@ -247,7 +247,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.11";
+const VERSIONE = "1.12";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -256,7 +256,7 @@ async function controllaVersione() {
     const v = r.ok && (await r.json()).v;
     if (!v || v === VERSIONE) return;
     nuovaVersione = v;
-    if (!A.sec && sessionStorage.getItem("mmt-agg") !== v) return aggiorna();
+    if (!A.sec && !daSalvare.size && sessionStorage.getItem("mmt-agg") !== v) return aggiorna();
     document.querySelectorAll(".ver").forEach(mostraVersione);
   } catch { /* senza rete: riprovo la prossima volta */ }
 }
@@ -269,7 +269,7 @@ function mostraVersione(el) {
   el.classList.toggle("nuova", !!nuovaVersione);
   el.innerHTML = nuovaVersione ? `↻ ${esc(nuovaVersione)}` : `v${VERSIONE}`;
   el.title = nuovaVersione ? `Versione ${nuovaVersione} pronta: tocca per aggiornare (hai la ${VERSIONE})` : "";
-  el.onclick = nuovaVersione ? () => { if (!A.busy || confirm("Sta ancora rispondendo: aggiorno lo stesso?")) aggiorna(); } : null;
+  el.onclick = nuovaVersione ? () => { if (daSalvare.size) return toast("Prima finisco di salvare la chat sul Mac", true); if (!A.busy || confirm("Sta ancora rispondendo: aggiorno lo stesso?")) aggiorna(); } : null;
 }
 const versioneHtml = () => `<button class="ver"></button>`;
 setInterval(controllaVersione, 15 * 60e3);
@@ -379,7 +379,7 @@ function dipingiStato() {
   el.className = "stato " + cls; el.innerHTML = `<i></i>${txt}`;
 }
 function blocca() {
-  if (nuovaVersione) return aggiorna();      // si richiudeva comunque: è il momento giusto per la versione nuova
+  if (nuovaVersione && !daSalvare.size) return aggiorna();   // è il momento giusto per la versione nuova, ma non con una chat da salvare
   Tunnel.ferma(); A.sec = null; A.chat = null; A.wid = null;
   blobs.forEach((u) => URL.revokeObjectURL(u)); blobs.clear();
   sblocca();
@@ -389,7 +389,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) { A.nascosto = Date.now(); return; }
   if (A.sec && A.nascosto && Date.now() - A.nascosto > 5 * 60e3 && !A.busy) blocca();
   controllaVersione();
-  ricaricaChats();
+  risalvaTutto(); ricaricaChats();
 });
 
 // ================================================================ casa: i workspace
@@ -766,14 +766,30 @@ async function annullaNota(m) {
   try { await api("POST", `workspace/${A.wid}/nota/modifiche`, { modifiche: inv }); m.notaAuto.stato = "annullato"; A.nota = null; salvaChat(A.chat); aggiornaMsg(A.chat, m); toast("Modifica alla nota annullata"); }
   catch (e) { toast(e.message, true); }
 }
+// Salvataggio con ripresa: se il broker perde un pezzo o il Mac dorme, la chat resta «da salvare» e riprovo
+// (dopo 5 s, poi sempre più di rado, e ogni volta che torni sull'app) finché il Mac non conferma.
+const daSalvare = new Map();          // chat.id → { chat, wid, prove, timer }
 function salvaChat(chat, wid = A.wid) {
+  const d = daSalvare.get(chat.id) || { prove: 0 };
+  clearTimeout(d.timer);
+  Object.assign(d, { chat, wid }); daSalvare.set(chat.id, d);
+  if (d.inCorso) { d.ancora = true; return; }          // ne parte uno solo per volta: quello dopo porta la versione nuova
+  d.inCorso = true;
   const copia = JSON.parse(JSON.stringify(chat));
   api("PUT", `workspace/${wid}/chats/${encodeURIComponent(chat.id)}`, copia).then((r) => {
     if (r?.rev != null) chat.rev = r.rev;
     // il Mac aveva scritto nella stessa chat: il server rimanda l'unione delle due versioni
     if (r?.chat) { adottaChat(chat, r.chat); if (A.chat === chat && !A.busy) disegnaThread(); }
-  }).catch(() => toast("Chat non salvata sul Mac", true));
+    if (d.prove) toast("Chat salvata sul Mac");
+    d.prove = 0; d.inCorso = false;
+    if (d.ancora) { d.ancora = false; salvaChat(d.chat, d.wid); } else daSalvare.delete(chat.id);
+  }).catch(() => {
+    d.inCorso = false; d.ancora = false; d.prove++;
+    if (d.prove === 1) toast("Chat non ancora salvata sul Mac: riprovo da solo", true);
+    d.timer = setTimeout(() => salvaChat(d.chat, d.wid), Math.min(60e3, 5e3 * 2 ** (d.prove - 1)));
+  });
 }
+function risalvaTutto() { for (const d of daSalvare.values()) if (!d.inCorso) salvaChat(d.chat, d.wid); }
 const stessoMsg = (a, b) => a.role === b.role && (a.content === b.content || (a.role === "assistant" && ((a.content || "").startsWith(b.content || "") || (b.content || "").startsWith(a.content || ""))));
 function adottaChat(loc, srv) {
   const liberi = [...(loc.messages || [])];     // tengo i miei oggetti: una risposta in scrittura continua a crescere lì
@@ -787,9 +803,18 @@ async function ricaricaChats() {
   const srv = await api("GET", `workspace/${wid}/chats`).catch(() => null);
   if (!srv || A.wid !== wid || A.busy) return;
   const mie = new Map(A.chats.map((c) => [c.id, c]));
-  A.chats = srv.map((s) => { const c = mie.get(s.id); if (!c) return s; if ((c.rev || 0) !== (s.rev || 0)) adottaChat(c, s); return c; })
+  const daRimandare = [];
+  A.chats = srv.map((s) => {
+    const c = mie.get(s.id); if (!c) return s;
+    if ((c.rev || 0) !== (s.rev || 0) || c.messages.length > (s.messages || []).length) {
+      adottaChat(c, s);
+      if (c.messages.length > (s.messages || []).length) daRimandare.push(c);   // qui ci sono messaggi che il Mac non ha
+    }
+    return c;
+  })
     .sort((a, b) => (b.updated || 0) - (a.updated || 0));
   if (A.chat && !A.chats.includes(A.chat)) A.chat = A.chats.find((c) => c.id === A.chat.id) || A.chat;
+  daRimandare.forEach((c) => salvaChat(c, wid));
   if (A.tab === "chat") { if (A.chat) { disegnaThread(); } else disegnaTab(); }
 }
 
