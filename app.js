@@ -247,7 +247,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.10";
+const VERSIONE = "1.11";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -389,6 +389,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) { A.nascosto = Date.now(); return; }
   if (A.sec && A.nascosto && Date.now() - A.nascosto > 5 * 60e3 && !A.busy) blocca();
   controllaVersione();
+  ricaricaChats();
 });
 
 // ================================================================ casa: i workspace
@@ -767,7 +768,29 @@ async function annullaNota(m) {
 }
 function salvaChat(chat, wid = A.wid) {
   const copia = JSON.parse(JSON.stringify(chat));
-  api("PUT", `workspace/${wid}/chats/${encodeURIComponent(chat.id)}`, copia).catch(() => toast("Chat non salvata sul Mac", true));
+  api("PUT", `workspace/${wid}/chats/${encodeURIComponent(chat.id)}`, copia).then((r) => {
+    if (r?.rev != null) chat.rev = r.rev;
+    // il Mac aveva scritto nella stessa chat: il server rimanda l'unione delle due versioni
+    if (r?.chat) { adottaChat(chat, r.chat); if (A.chat === chat && !A.busy) disegnaThread(); }
+  }).catch(() => toast("Chat non salvata sul Mac", true));
+}
+const stessoMsg = (a, b) => a.role === b.role && (a.content === b.content || (a.role === "assistant" && ((a.content || "").startsWith(b.content || "") || (b.content || "").startsWith(a.content || ""))));
+function adottaChat(loc, srv) {
+  const liberi = [...(loc.messages || [])];     // tengo i miei oggetti: una risposta in scrittura continua a crescere lì
+  loc.messages = (srv.messages || []).map((m) => { const i = liberi.findIndex((x) => stessoMsg(x, m)); return i < 0 ? m : liberi.splice(i, 1)[0]; }).concat(liberi);
+  loc.updated = Math.max(loc.updated || 0, srv.updated || 0); loc.rev = srv.rev;
+}
+// torni sull'app dopo aver scritto dal Mac: ricarico le chat del workspace aperto
+async function ricaricaChats() {
+  const wid = A.wid;
+  if (!wid || A.busy || !A.sec) return;
+  const srv = await api("GET", `workspace/${wid}/chats`).catch(() => null);
+  if (!srv || A.wid !== wid || A.busy) return;
+  const mie = new Map(A.chats.map((c) => [c.id, c]));
+  A.chats = srv.map((s) => { const c = mie.get(s.id); if (!c) return s; if ((c.rev || 0) !== (s.rev || 0)) adottaChat(c, s); return c; })
+    .sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  if (A.chat && !A.chats.includes(A.chat)) A.chat = A.chats.find((c) => c.id === A.chat.id) || A.chat;
+  if (A.tab === "chat") { if (A.chat) { disegnaThread(); } else disegnaTab(); }
 }
 
 // ================================================================ nota
