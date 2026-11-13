@@ -247,7 +247,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.12";
+const VERSIONE = "1.13";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -575,17 +575,18 @@ function disegnaComposer() {
   const web = pref.web;
   c.innerHTML = `<div class="comp">
     ${A.pins.length || A.foto.length ? `<div class="att">${A.pins.map((p, k) => `<span class="pin">${svg(TIPO_IC[p.tipo] || "file")}${esc(p.nome)}<button data-xp="${k}">${svg("x")}</button></span>`).join("")}${A.foto.map((f, k) => `<span class="ph"><img src="${f.url}" alt=""><button data-xf="${k}">${svg("x")}</button></span>`).join("")}</div>` : ""}
-    <div class="box"><button class="ib" id="clip" aria-label="Foto">${svg("image")}</button>
-      <textarea id="input" rows="1" placeholder="${A.chat ? "Rispondi…" : `Scrivi a ${esc(isSpecial() ? "MyMind" : ws().nome)}…`}" enterkeyhint="enter"></textarea>
+    <div class="box"><button class="ib" id="cam" aria-label="Scatta una foto">${svg("camera")}</button><button class="ib" id="clip" aria-label="Foto dalla galleria">${svg("image")}</button>
+      <textarea id="input" rows="1" placeholder="${A.chat ? "Rispondi…" : "Scrivi…"}" enterkeyhint="enter"></textarea>
       <button class="ib${web ? " on" : ""}" id="web" aria-label="Web">${svg("globe")}</button>
       <button class="ib main" id="send" aria-label="Invia">${svg(A.busy ? "stop" : "up")}</button></div>
-    <input type="file" id="pick" accept="image/*" multiple hidden></div>`;
+    <input type="file" id="pick" accept="image/*" multiple hidden><input type="file" id="scatto" accept="image/*" capture="environment" hidden></div>`;
   const inp = $("input");
   inp.oninput = autosize;
   $("send").onclick = () => A.busy ? A.ctrl?.abort() : invia();
   $("web").onclick = () => { pref.web = !pref.web; savePref(); $("web").classList.toggle("on", pref.web); toast(pref.web ? "Cerca anche sul web" : "Senza web"); };
   $("clip").onclick = () => $("pick").click();
-  $("pick").onchange = async () => { for (const f of $("pick").files) A.foto.push(await toJpeg(f)); disegnaComposer(); $("input").focus(); };
+  $("cam").onclick = () => $("scatto").click();       // apre direttamente la fotocamera posteriore
+  for (const id of ["pick", "scatto"]) $(id).onchange = async () => { for (const f of $(id).files) A.foto.push(await toJpeg(f)); disegnaComposer(); $("input").focus(); };
   c.querySelectorAll("[data-xp]").forEach((b) => b.onclick = () => { A.pins.splice(+b.dataset.xp, 1); disegnaComposer(); });
   c.querySelectorAll("[data-xf]").forEach((b) => b.onclick = () => { A.foto.splice(+b.dataset.xf, 1); disegnaComposer(); });
 }

@@ -237,6 +237,7 @@ details.think div { white-space: pre-wrap; padding: 8px 0 0 12px; border-left: 2
 .comp textarea { flex: 1; min-width: 0; border: 0; outline: 0; resize: none; background: none; font-size: 16px; line-height: 1.4; padding: 11px 6px; max-height: 160px; }
 .comp textarea::placeholder { color: var(--faint); }
 .comp .ib { width: 42px; height: 42px; border-radius: 50%; }
+.comp #cam, .comp #clip { width: 38px; }   /* due pulsanti a sinistra: un filo più stretti per lasciare spazio al testo */
 .att { display: flex; gap: 8px; overflow-x: auto; padding: 0 4px 8px; }
 .att .pin { flex: none; } .att .pin button { display: grid; margin-left: 2px; } .att .pin button svg.i { width: 13px; height: 13px; }
 .att .ph { position: relative; flex: none; } .att .ph img { width: 54px; height: 54px; border-radius: 12px; object-fit: cover; display: block; }
