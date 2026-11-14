@@ -40,6 +40,22 @@ function giornoDi(t) {
   if (d.toDateString() === ieri.toDateString()) return "Ieri";
   return d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", ...(d.getFullYear() !== oggiD.getFullYear() ? { year: "numeric" } : {}) });
 }
+// pressione lunga su un messaggio: ti dico quando è stato scritto
+function tieniPremuto(el) {
+  let timer = null, x = 0, y = 0;
+  const via = () => { clearTimeout(timer); timer = null; };
+  el.addEventListener("pointerdown", (e) => {
+    const row = e.target.closest(".msg[data-i]"); if (!row || !A.chat) return;
+    x = e.clientX; y = e.clientY; via();
+    timer = setTimeout(() => {
+      const m = A.chat.messages[+row.dataset.i]; if (!m) return;
+      navigator.vibrate?.(8);
+      toast(m.t ? `${m.role === "user" ? "Scritto" : "Risposto"} ${new Date(m.t).toLocaleString("it-IT", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}` : "Messaggio senza orario: è di prima che MyMind li segnasse");
+    }, 550);
+  });
+  el.addEventListener("pointermove", (e) => { if (timer && Math.hypot(e.clientX - x, e.clientY - y) > 10) via(); });
+  for (const ev of ["pointerup", "pointercancel", "scroll"]) el.addEventListener(ev, via, true);
+}
 function separatore(msgs, i) {
   const m = msgs[i]; if (!m.t) return "";
   let prima = null;
@@ -267,7 +283,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.15";
+const VERSIONE = "1.16";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -510,6 +526,7 @@ function scorri() { const c = $("corpo"); if (c) c.scrollTop = c.scrollHeight; }
 function disegnaThread() {
   const ch = A.chat;
   $("corpo").innerHTML = `<div class="thread" id="thread">${ch.messages.map((m, i) => separatore(ch.messages, i) + msgHtml(m, i)).join("")}</div>`;
+  tieniPremuto($("thread"));
   legaThread();
   caricaImmagini($("corpo"));
 }
