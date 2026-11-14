@@ -25,7 +25,14 @@ function onColor(hex) {
   const n = parseInt(String(hex).replace("#", ""), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
   return (0.299 * r + 0.587 * g + 0.114 * b) > 165 ? "#141210" : "#ffffff";
 }
-const oggi = () => new Date().toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const oggi = () => new Date().toLocaleString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) + ", ore " + new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+// Le chat durano giorni: ogni messaggio porta l'ora in cui è nato e il modello la vede tra parentesi quadre,
+// così un «oggi» scritto martedì resta martedì anche se la domanda arriva sabato
+const quando = (t) => new Date(t).toLocaleString("it-IT", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+const timbro = (m) => m.role === "user" && m.t ? `[${quando(m.t)}] ` : "";
+const DATA_REGOLA = " La conversazione può andare avanti per giorni: ogni messaggio dell'utente porta tra parentesi quadre quando è stato scritto. "
+  + "«Oggi», «stamattina», «ieri» dentro un messaggio vanno letti rispetto alla sua data, non a quella di adesso; per sapere che giorno è ora vale solo la data qui sopra. "
+  + "Non mettere date tra parentesi quadre all'inizio delle tue risposte.";
 function applicaTema() {
   const scuro = pref.tema === "dark" || (pref.tema === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.theme = scuro ? "dark" : "light";
@@ -247,7 +254,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.13";
+const VERSIONE = "1.14";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -612,7 +619,7 @@ async function invia() {
   }
   const foto = A.foto, pins = A.pins;
   A.foto = []; A.pins = [];
-  const msg = { role: "user", content: text || (pins.length ? "Leggi la fonte indicata e dimmi in breve cosa contiene." : "Cosa vedi in questa immagine?"), imgs: [] };
+  const msg = { role: "user", content: text || (pins.length ? "Leggi la fonte indicata e dimmi in breve cosa contiene." : "Cosa vedi in questa immagine?"), imgs: [], t: Date.now() };
   if (pins.length) msg.pins = pins;
   A.chat.messages.push(msg);
   $("input").value = ""; autosize();
@@ -628,7 +635,7 @@ async function invia() {
 async function genera(chat, freshImages) {
   const model = modello(), info = minfo(model), wid = A.wid, w = ws();
   const lastUser = [...chat.messages].reverse().find((m) => m.role === "user");
-  const reply = { role: "assistant", content: "", model, phase: "" };
+  const reply = { role: "assistant", content: "", model, phase: "", t: Date.now() };
   const wantWeb = pref.web || WEB_RE.test(lastUser?.content || "");
   if (wantWeb) reply.usaWeb = true;
   chat.messages.push(reply); chat.updated = Date.now();
@@ -637,7 +644,7 @@ async function genera(chat, freshImages) {
   disegnaThread(); disegnaComposer(); scorri();
   const t0 = performance.now(); let first = 0, lastPaint = 0;
   try {
-    let system = "Rispondi in italiano, in modo chiaro e concreto. L'utente ti scrive dal telefono: vai al punto, niente preamboli." + `\n\nOggi è ${oggi()}.`;
+    let system = "Rispondi in italiano, in modo chiaro e concreto. L'utente ti scrive dal telefono: vai al punto, niente preamboli." + `\n\nOggi è ${oggi()}.` + DATA_REGOLA;
     const rules = "\n\nRegole: usa note ed estratti quando sono pertinenti; quando usi un estratto citalo col suo numero tra parentesi quadre, per esempio [2]. "
       + "Se le fonti non bastano dillo chiaramente, poi rispondi con quello che sai distinguendo ciò che viene dalle fonti da ciò che è conoscenza generale. "
       + "Non inventare numeri, date o nomi." + (wantWeb ? " Puoi usare anche i risultati della ricerca web: cita le pagine con un link." : "");
@@ -697,7 +704,7 @@ async function genera(chat, freshImages) {
       return d ? `\n\n<documento nome="${d.nome}"${tools ? ` id="${p.fonte}"` : ""}>\n${d.testo}\n</documento>` : `\n\n[l'utente ha indicato «${p.nome}», ma il testo non è disponibile]`;
     }).join("");
     const msgs = chat.messages.slice(0, -1).filter((m) => !m.error);
-    const history = msgs.map((m) => ({ role: m.role, content: m.content + (m.role === "user" ? attached(m) : "") + (m.imgs?.length && m !== lastUser ? `\n[${m.imgs.length} immagine/i allegate in precedenza]` : "") }));
+    const history = msgs.map((m) => ({ role: m.role, content: timbro(m) + m.content + (m.role === "user" ? attached(m) : "") + (m.imgs?.length && m !== lastUser ? `\n[${m.imgs.length} immagine/i allegate in precedenza]` : "") }));
     msgs.forEach((m, k) => { const imgs = (m.pins || []).filter((p) => owner.get(p.fonte) === m).flatMap((p) => docs.get(p.fonte)?.immagini || []); if (imgs.length) history[k].images = imgs; });
     if (freshImages?.length) history[history.length - 1].images = [...(history[history.length - 1].images || []), ...freshImages];
     else if (lastUser?.imgs?.length) {                     // rigenerazione: ricarico le foto dell'ultima domanda
