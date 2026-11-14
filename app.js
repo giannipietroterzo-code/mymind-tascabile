@@ -33,6 +33,19 @@ const timbro = (m) => m.role === "user" && m.t ? `[${quando(m.t)}] ` : "";
 const DATA_REGOLA = " La conversazione può andare avanti per giorni: ogni messaggio dell'utente porta tra parentesi quadre quando è stato scritto. "
   + "«Oggi», «stamattina», «ieri» dentro un messaggio vanno letti rispetto alla sua data, non a quella di adesso; per sapere che giorno è ora vale solo la data qui sopra. "
   + "Non mettere date tra parentesi quadre all'inizio delle tue risposte.";
+// separatore quando cambia giorno, come su WhatsApp: solo tra messaggi che hanno l'orario (quelli vecchi non ce l'hanno)
+function giornoDi(t) {
+  const d = new Date(t), oggiD = new Date(), ieri = new Date(Date.now() - 864e5);
+  if (d.toDateString() === oggiD.toDateString()) return "Oggi";
+  if (d.toDateString() === ieri.toDateString()) return "Ieri";
+  return d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", ...(d.getFullYear() !== oggiD.getFullYear() ? { year: "numeric" } : {}) });
+}
+function separatore(msgs, i) {
+  const m = msgs[i]; if (!m.t) return "";
+  let prima = null;
+  for (let k = i - 1; k >= 0; k--) if (msgs[k].t) { prima = msgs[k].t; break; }
+  return prima && new Date(prima).toDateString() === new Date(m.t).toDateString() ? "" : `<div class="giorno"><span>${giornoDi(m.t)}</span></div>`;
+}
 function applicaTema() {
   const scuro = pref.tema === "dark" || (pref.tema === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.theme = scuro ? "dark" : "light";
@@ -254,7 +267,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.14";
+const VERSIONE = "1.15";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -496,7 +509,7 @@ function scorri() { const c = $("corpo"); if (c) c.scrollTop = c.scrollHeight; }
 // ================================================================ chat: una conversazione
 function disegnaThread() {
   const ch = A.chat;
-  $("corpo").innerHTML = `<div class="thread" id="thread">${ch.messages.map((m, i) => msgHtml(m, i)).join("")}</div>`;
+  $("corpo").innerHTML = `<div class="thread" id="thread">${ch.messages.map((m, i) => separatore(ch.messages, i) + msgHtml(m, i)).join("")}</div>`;
   legaThread();
   caricaImmagini($("corpo"));
 }

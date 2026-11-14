@@ -324,3 +324,9 @@ img.rotta { opacity: .2; }
 .testa .tabs { margin-bottom: 0; }
 .wsv #corpo { padding-top: 12px; }
 .home .hero { padding-top: 20px; }
+
+/* separatore di giorno nella chat */
+.giorno { display: flex; align-items: center; gap: 12px; margin: 6px 0 -4px; }
+.giorno::before, .giorno::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.giorno span { flex: none; padding: 5px 12px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.giorno span::first-letter { text-transform: uppercase; }
