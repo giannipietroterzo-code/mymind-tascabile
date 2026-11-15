@@ -42,7 +42,7 @@ const Cassa = {
 
 // ================================================================ MQTT + cifratura
 const Tunnel = {
-  sec: null, key: null, ws: null, buf: new Uint8Array(0), pronto: false, attesa: new Map(), tenta: 0, ping: 0,
+  sec: null, key: null, ws: null, buf: new Uint8Array(0), pronto: false, attesa: new Map(), tenta: 0, ping: 0, visto: 0,
   stato: "spento", onStato: () => {},
   async avvia(segreto) {
     this.sec = segreto;
@@ -56,7 +56,19 @@ const Tunnel = {
     const rl = []; let n = body.length; do { let d = n % 128; n = Math.floor(n / 128); if (n) d |= 128; rl.push(d); } while (n);
     const out = new Uint8Array(1 + rl.length + body.length); out[0] = h; out.set(rl, 1); out.set(body, 1 + rl.length); return out;
   },
+  // Sui telefoni una connessione può morire senza chiudersi (cambio Wi-Fi/dati, schermo spento): resta «aperta» ma
+  // quello che mandi finisce nel vuoto. Per questo guardo quando è arrivato l'ultimo byte dal broker (PINGRESP compresi)
+  // e, se tace da troppo, la butto e ne apro una nuova.
+  muta(ms) { return this.ws && this.ws.readyState === 1 && Date.now() - this.visto > ms; },
+  butta() {
+    const ws = this.ws; if (!ws) return;
+    this.ws = null; this.pronto = false; clearInterval(this.ping);
+    try { ws.onclose = null; ws.close(); } catch {}
+    for (const [, w] of this.attesa) w.ko(new Error("connessione interrotta: riprova"));
+    this.attesa.clear();
+  },
   collega() {
+    if (this.muta(45e3)) this.butta();
     if (!this.sec || (this.ws && this.ws.readyState <= 1)) return;
     const b = this.sec.broker || {}, host = b.h || "broker.hivemq.com", user = b.u || "", pass = b.p || "";
     let ws; try { ws = new WebSocket(`wss://${host}:8884/mqtt`, ["mqtt"]); } catch { return; }
@@ -65,9 +77,16 @@ const Tunnel = {
     ws.onopen = () => {
       ws.send(this.pkt(0x10, new Uint8Array([...this.str("MQTT"), 4, 0x02 | (user ? 0x80 : 0) | (pass ? 0x40 : 0), 0, 60,
         ...this.str("mmt-" + rid()), ...(user ? this.str(user) : []), ...(pass ? this.str(pass) : [])])));
-      clearInterval(this.ping); this.ping = setInterval(() => { try { ws.send(new Uint8Array([0xC0, 0])); } catch {} }, 30e3);
+      this.visto = Date.now();
+      clearInterval(this.ping);
+      this.ping = setInterval(() => {
+        if (this.ws !== ws) return clearInterval(this.ping);
+        if (this.muta(45e3)) { this.butta(); return this.collega(); }       // due ping senza risposta: è morta
+        try { ws.send(new Uint8Array([0xC0, 0])); } catch {}
+      }, 20e3);
     };
     ws.onmessage = (e) => {
+      this.visto = Date.now();
       const add = new Uint8Array(e.data), u = new Uint8Array(this.buf.length + add.length); u.set(this.buf); u.set(add, this.buf.length); this.buf = u;
       for (;;) {                                       // un pacchetto può arrivare a pezzi, o più pacchetti insieme
         const u = this.buf; if (u.length < 2) break;
@@ -99,6 +118,12 @@ const Tunnel = {
     };
   },
   async pronti(ms = 15000) {
+    if (this.muta(25e3)) {                            // zitta da un po': un ping, e se in 3 s non risponde la rifaccio
+      const prima = this.visto;
+      try { this.ws.send(new Uint8Array([0xC0, 0])); } catch {}
+      for (let t = 0; this.visto === prima && t < 3000; t += 100) await new Promise((r) => setTimeout(r, 100));
+      if (this.visto === prima) this.butta();
+    }
     this.collega();
     for (let t = 0; !this.pronto && t < ms; t += 200) await new Promise((r) => setTimeout(r, 200));
     if (!this.pronto) throw new Error("non riesco a collegarmi al broker: controlla la connessione");
@@ -138,7 +163,7 @@ const Tunnel = {
     const p = new Promise((ok, ko) => {
       w.ko = (e) => { clearInterval(w.timer); this.attesa.delete(id); ko(e); };
       w.fatto = () => { clearInterval(w.timer); this.attesa.delete(id); ok(w); };
-      w.timer = setInterval(() => { if (Date.now() - w.visto > attesa) { w.ko(new Error("il Mac non risponde: è acceso e collegato a internet?")); this.manda({ id, t: Math.round(Date.now() / 1000), op: "annulla" }).catch(() => {}); } }, 1000);
+      w.timer = setInterval(() => { if (Date.now() - w.visto > attesa) { if (this.muta(attesa / 2)) this.butta(); w.ko(new Error("il Mac non risponde: è acceso e collegato a internet?")); this.manda({ id, t: Math.round(Date.now() / 1000), op: "annulla" }).catch(() => {}); } }, 1000);
     });
     this.attesa.set(id, w);
     if (segnale) segnale.addEventListener("abort", () => { this.manda({ id, t: Math.round(Date.now() / 1000), op: "annulla" }).catch(() => {}); const e = new Error("interrotta"); e.name = "AbortError"; w.ko(e); });
