@@ -68,6 +68,70 @@ function conFonti(m, chip) {
 }
 // toglie dal testo i «@nome» di una fonte che hai tolto dal messaggio
 const togliCitazione = (testo, nome) => testo.replace(new RegExp("\\s?@" + reEsc(nome) + "(?=\\s|$|[.,;:!?)])", "g"), "");
+// Etichette dal vivo nel campo di scrittura. Una textarea non può contenere etichette vere: sotto il testo c'è uno
+// «specchio» con gli stessi caratteri e a capo, che disegna una pillola dietro a ogni @fonte. In più l'@fonte si comporta
+// da etichetta: Backspace/Canc la tolgono intera, non ci si scrive dentro, e se sparisce dal testo la fonte si stacca.
+function campoConFonti(t, pinsDi, stacca) {
+  if (t._specchio) return t._specchio;
+  const sp = document.createElement("div"); sp.className = "specchio"; sp.setAttribute("aria-hidden", "true");
+  t.parentNode.insertBefore(sp, t);
+  if (getComputedStyle(t.parentNode).position === "static") t.parentNode.style.position = "relative";
+  t.style.position = "relative"; t.style.zIndex = 1;
+  const COPIA = ["fontFamily", "fontSize", "fontWeight", "fontStyle", "letterSpacing", "wordSpacing", "lineHeight", "textIndent", "tabSize",
+    "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth", "textTransform"];
+  const gettoni = () => {                                   // dove stanno le @fonte nel testo: [{da, a, p}]
+    const v = t.value, out = [];
+    for (const p of [...pinsDi()].sort((x, y) => y.nome.length - x.nome.length)) {
+      const k = "@" + p.nome;
+      for (let i = v.indexOf(k); i >= 0; i = v.indexOf(k, i + 1)) if (!out.some((g) => i < g.a && i + k.length > g.da)) out.push({ da: i, a: i + k.length, p });
+    }
+    return out.sort((x, y) => x.da - y.da);
+  };
+  const agg = () => {
+    const cs = getComputedStyle(t);
+    for (const k of COPIA) sp.style[k] = cs[k];
+    Object.assign(sp.style, { top: t.offsetTop + "px", left: t.offsetLeft + "px", width: t.offsetWidth + "px", height: t.offsetHeight + "px" });
+    let html = "", da = 0; const v = t.value;
+    for (const g of gettoni()) { html += esc(v.slice(da, g.da)) + "<mark>" + esc(v.slice(g.da, g.a)) + "</mark>"; da = g.a; }
+    sp.innerHTML = html + esc(v.slice(da)) + "​";
+    sp.scrollTop = t.scrollTop;
+  };
+  const dentro = (pos) => gettoni().find((g) => pos > g.da && pos < g.a);
+  const cancella = (e, indietro) => {                      // via l'etichetta intera, e lo spazio che la seguiva
+    if (t.selectionStart !== t.selectionEnd) return false;
+    const pos = t.selectionStart;
+    const g = gettoni().find((x) => indietro ? pos > x.da && pos <= x.a : pos >= x.da && pos < x.a);
+    if (!g) return false;
+    e.preventDefault();
+    const fine = t.value[g.a] === " " && (g.da === 0 || t.value[g.da - 1] === " ") ? g.a + 1 : g.a;
+    t.setRangeText("", g.da, fine, "start"); t.dispatchEvent(new Event("input", { bubbles: true }));
+    return true;
+  };
+  // sulle tastiere Android il keydown dice spesso solo «Unidentified»: beforeinput invece dice sempre che si cancella
+  t.addEventListener("beforeinput", (e) => {
+    if (e.inputType === "deleteContentBackward") cancella(e, true);
+    else if (e.inputType === "deleteContentForward") cancella(e, false);
+  });
+  t.addEventListener("keydown", (e) => {
+    if (e.isComposing || t.selectionStart !== t.selectionEnd) return;
+    const pos = t.selectionStart;
+    if ((e.key === "Backspace" && cancella(e, true)) || (e.key === "Delete" && cancella(e, false))) return;
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {  // si scrive accanto all'etichetta, mai dentro
+      const d = dentro(pos); if (d) t.setSelectionRange(d.a, d.a);
+    }
+  });
+  t.addEventListener("input", () => {
+    const vive = new Set(gettoni().map((g) => g.p));
+    for (const p of [...pinsDi()]) if (!vive.has(p) && p._nelTesto) stacca(p);
+    for (const p of vive) p._nelTesto = true;           // da qui in poi questa fonte vive nel testo: se sparisce, si stacca
+    agg();
+  });
+  t.addEventListener("scroll", () => { sp.scrollTop = t.scrollTop; });
+  new ResizeObserver(agg).observe(t);
+  t._specchio = { agg };
+  agg();
+  return t._specchio;
+}
 function separatore(msgs, i) {
   const m = msgs[i]; if (!m.t) return "";
   let prima = null;
@@ -295,7 +359,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.18";
+const VERSIONE = "1.19";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -632,6 +696,11 @@ function disegnaComposer() {
     <input type="file" id="pick" accept="image/*" multiple hidden><input type="file" id="scatto" accept="image/*" capture="environment" hidden></div>`;
   const inp = $("input");
   inp.oninput = autosize;
+  campoConFonti(inp, () => A.pins, (p) => {             // l'etichetta è sparita dal testo: la fonte si stacca
+    A.pins = A.pins.filter((x) => x !== p);
+    const v = inp.value, c = inp.selectionStart; disegnaComposer();
+    const n = $("input"); n.value = v; n.setSelectionRange(c, c); autosize(); n.focus();
+  });
   $("send").onclick = () => A.busy ? A.ctrl?.abort() : invia();
   $("web").onclick = () => { pref.web = !pref.web; savePref(); $("web").classList.toggle("on", pref.web); toast(pref.web ? "Cerca anche sul web" : "Senza web"); };
   $("clip").onclick = () => $("pick").click();
@@ -640,7 +709,7 @@ function disegnaComposer() {
   c.querySelectorAll("[data-xp]").forEach((b) => b.onclick = () => { const testo = togliCitazione($("input").value, A.pins[+b.dataset.xp].nome); A.pins.splice(+b.dataset.xp, 1); disegnaComposer(); $("input").value = testo; autosize(); });
   c.querySelectorAll("[data-xf]").forEach((b) => b.onclick = () => { A.foto.splice(+b.dataset.xf, 1); disegnaComposer(); });
 }
-function autosize() { const t = $("input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }
+function autosize() { const t = $("input"); if (!t) return; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; t._specchio?.agg(); }
 async function toJpeg(file, lato = 1600) {
   const img = await createImageBitmap(file);
   const k = Math.min(1, lato / Math.max(img.width, img.height)), cv = document.createElement("canvas");

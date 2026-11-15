@@ -336,3 +336,9 @@ img.rotta { opacity: .2; }
   background: color-mix(in srgb, var(--ws) 14%, transparent); border: 1px solid color-mix(in srgb, var(--ws) 35%, transparent);
   color: inherit; font-size: .92em; font-weight: 600; line-height: 1.5; white-space: nowrap; cursor: pointer; }
 .pin-in svg.i, .pin-in svg { width: 13px; height: 13px; flex: none; opacity: .75; }
+
+/* etichette dal vivo nel campo di scrittura: lo specchio sta sotto la textarea e disegna le pillole */
+.specchio { position: absolute; pointer-events: none; overflow: hidden; color: transparent; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+  box-sizing: border-box; border-style: solid; border-color: transparent; margin: 0; }
+.specchio mark { color: transparent; border-radius: 6px; background: color-mix(in srgb, var(--ws) 24%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ws) 24%, transparent), 0 0 0 3px color-mix(in srgb, var(--ws) 45%, transparent); }
