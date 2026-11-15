@@ -127,8 +127,11 @@ function campoConFonti(t, pinsDi, stacca) {
     agg();
   });
   t.addEventListener("scroll", () => { sp.scrollTop = t.scrollTop; });
-  new ResizeObserver(agg).observe(t);
-  t._specchio = { agg };
+  // il campo può spostarsi senza cambiare testo (sopra compare l'anteprima della fonte scelta): riallineo anche allora
+  const ro = new ResizeObserver(() => agg());
+  ro.observe(t); ro.observe(t.parentNode); if (t.parentNode.parentNode) ro.observe(t.parentNode.parentNode);
+  const poi = () => { agg(); requestAnimationFrame(agg); };    // e un giro dopo il disegno, per sicurezza
+  t._specchio = { agg: poi };
   agg();
   return t._specchio;
 }
@@ -359,7 +362,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.19";
+const VERSIONE = "1.20";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
