@@ -330,3 +330,9 @@ img.rotta { opacity: .2; }
 .giorno::before, .giorno::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .giorno span { flex: none; padding: 5px 12px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
 .giorno span::first-letter { text-transform: uppercase; }
+
+/* fonte citata con @ dentro la frase del messaggio */
+.pin-in { display: inline-flex; align-items: center; gap: 4px; padding: 0 7px 0 5px; margin: 0 1px; border-radius: 7px; vertical-align: baseline;
+  background: color-mix(in srgb, var(--ws) 14%, transparent); border: 1px solid color-mix(in srgb, var(--ws) 35%, transparent);
+  color: inherit; font-size: .92em; font-weight: 600; line-height: 1.5; white-space: nowrap; cursor: pointer; }
+.pin-in svg.i, .pin-in svg { width: 13px; height: 13px; flex: none; opacity: .75; }

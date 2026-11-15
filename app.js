@@ -56,6 +56,18 @@ function tieniPremuto(el) {
   el.addEventListener("pointermove", (e) => { if (timer && Math.hypot(e.clientX - x, e.clientY - y) > 10) via(); });
   for (const ev of ["pointerup", "pointercancel", "scroll"]) el.addEventListener(ev, via, true);
 }
+// le fonti citate con @ restano nella frase: nel messaggio «@nome» diventa un'etichetta al suo posto
+const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function conFonti(m, chip) {
+  let html = esc(m.content || ""); const fuori = [];
+  for (const p of [...(m.pins || [])].sort((a, b) => b.nome.length - a.nome.length)) {   // i nomi lunghi prima: «foto (2)» non diventa «foto»
+    const re = new RegExp("@" + reEsc(esc(p.nome)), "g");
+    if (re.test(html)) html = html.replace(re, () => chip(p)); else fuori.push(p);
+  }
+  return { html, fuori };
+}
+// toglie dal testo i «@nome» di una fonte che hai tolto dal messaggio
+const togliCitazione = (testo, nome) => testo.replace(new RegExp("\\s?@" + reEsc(nome) + "(?=\\s|$|[.,;:!?)])", "g"), "");
 function separatore(msgs, i) {
   const m = msgs[i]; if (!m.t) return "";
   let prima = null;
@@ -283,7 +295,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.17";
+const VERSIONE = "1.18";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -534,8 +546,9 @@ function msgHtml(m, i) {
   const base = `workspace/${A.wid}/`;
   if (m.role === "user") {
     const imgs = (m.imgs || []).map((p) => `<img data-src="${esc(base + p)}" alt="">`).join("");
-    const pins = (m.pins || []).map((p) => `<span class="pin">${svg(TIPO_IC[p.tipo] || "file")}${esc(p.nome)}</span>`).join("");
-    return `<div class="msg u" data-i="${i}">${pins ? `<div class="pins">${pins}</div>` : ""}${m.content ? `<div class="bubble">${esc(m.content)}</div>` : ""}${imgs ? `<div class="uimgs">${imgs}</div>` : ""}</div>`;
+    const { html: testoH, fuori } = conFonti(m, (p) => `<span class="pin-in">${svg(TIPO_IC[p.tipo] || "file")}${esc(p.nome)}</span>`);
+    const pins = fuori.map((p) => `<span class="pin">${svg(TIPO_IC[p.tipo] || "file")}${esc(p.nome)}</span>`).join("");
+    return `<div class="msg u" data-i="${i}">${pins ? `<div class="pins">${pins}</div>` : ""}${m.content ? `<div class="bubble">${testoH}</div>` : ""}${imgs ? `<div class="uimgs">${imgs}</div>` : ""}</div>`;
   }
   const live = A.busy && i === A.chat.messages.length - 1;
   let body;
@@ -624,7 +637,7 @@ function disegnaComposer() {
   $("clip").onclick = () => $("pick").click();
   $("cam").onclick = () => $("scatto").click();       // apre direttamente la fotocamera posteriore
   for (const id of ["pick", "scatto"]) $(id).onchange = async () => { for (const f of $(id).files) A.foto.push(await toJpeg(f)); disegnaComposer(); $("input").focus(); };
-  c.querySelectorAll("[data-xp]").forEach((b) => b.onclick = () => { A.pins.splice(+b.dataset.xp, 1); disegnaComposer(); });
+  c.querySelectorAll("[data-xp]").forEach((b) => b.onclick = () => { const testo = togliCitazione($("input").value, A.pins[+b.dataset.xp].nome); A.pins.splice(+b.dataset.xp, 1); disegnaComposer(); $("input").value = testo; autosize(); });
   c.querySelectorAll("[data-xf]").forEach((b) => b.onclick = () => { A.foto.splice(+b.dataset.xf, 1); disegnaComposer(); });
 }
 function autosize() { const t = $("input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }
@@ -724,7 +737,9 @@ async function genera(chat, freshImages) {
         if (info?.vede && ["pdf", "foto"].includes(p.tipo)) r.immagini = (await api("GET", `workspace/${wid}/fonti/${p.fonte}/immagini?max=8`).catch(() => ({}))).immagini || [];
         docs.set(p.fonte, r); budget -= r.testo.length;
       }
-      system += "\n\nQuando l'utente indica una fonte, il suo testo completo è allegato al suo messaggio tra <documento> e </documento>: "
+      system += "\n\nNel messaggio dell'utente «@nome» segna il punto della frase in cui cita quella fonte (per esempio «quando l'interruttore @interruttore1.jpg è spento»): "
+        + "è il documento allegato con lo stesso nome, e la frase va letta riferendo ogni @ al suo documento."
+        + "\n\nQuando l'utente indica una fonte, il suo testo completo è allegato al suo messaggio tra <documento> e </documento>: "
         + "è di quel documento che parla («questa scheda», «questi pannelli»…), leggilo e usalo; ha la precedenza sugli estratti. "
         + "Se ci sono anche le immagini delle pagine o la foto, per tabelle, numeri e targhette fidati delle immagini: il testo estratto può mescolare le colonne.";
       reply.indicate = pinned.map((p) => ({ fonte: p.fonte, nome: p.nome }));
@@ -947,7 +962,10 @@ async function apriFonte(f, wid) {
   }
   s.querySelector("#fChiedi").onclick = () => {
     closeSheet();
-    const go = () => { A.pins.push({ fonte: f.id, nome: f.nome, tipo: f.tipo }); A.tab = "chat"; A.chat = null; schermoWs(); $("input")?.focus(); };
+    const go = () => {
+      A.pins.push({ fonte: f.id, nome: f.nome, tipo: f.tipo }); A.tab = "chat"; A.chat = null; schermoWs();
+      const inp = $("input"); if (inp) { inp.value = `@${f.nome} `; autosize(); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }   // il segnaposto, e scrivi intorno
+    };
     if (wid !== A.wid) apriWs(wid).then(go); else go();
   };
   s.querySelector("#fApri").onclick = async (e) => {
