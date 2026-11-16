@@ -342,3 +342,9 @@ img.rotta { opacity: .2; }
   box-sizing: border-box; border-style: solid; border-color: transparent; margin: 0; }
 .specchio mark { color: transparent; border-radius: 6px; background: color-mix(in srgb, var(--ws) 24%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ws) 24%, transparent), 0 0 0 3px color-mix(in srgb, var(--ws) 45%, transparent); }
+
+/* quanto ha letto il modello: verde/ambra/rosso */
+.peso { font-variant-numeric: tabular-nums; }
+.peso.medio { color: #c9952e; }
+.peso.pesante { color: var(--danger, var(--bad, #d9534f)); font-weight: 600; }
+.peso.pesante::before { content: "● "; }

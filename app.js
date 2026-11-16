@@ -362,7 +362,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.20";
+const VERSIONE = "1.21";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -631,7 +631,17 @@ function msgHtml(m, i) {
   return `<div class="msg b${live ? " live" : ""}" data-i="${i}">
     <div class="who"><span class="av"${pc(m.model)}>${svg("cloud")}</span><b>${esc(shortName(m.model))}</b>${tags ? `<small>${tags}</small>` : ""}</div>
     <div class="md">${body}</div>${web ? `<div class="wsrcs">${web}</div>` : ""}${notaAutoHtml(m, i)}
-    ${live ? "" : `<div class="mfoot"><button data-copy="${i}">${svg("copy")}</button>${i === A.chat.messages.length - 1 ? `<button data-redo>${svg("redo")}Rigenera</button>` : ""}<span>${st?.eval_count ? `${st.eval_count} token${costo}` : ""}</span></div>`}</div>`;
+    ${live ? "" : `<div class="mfoot"><button data-copy="${i}">${svg("copy")}</button>${i === A.chat.messages.length - 1 ? `<button data-redo>${svg("redo")}Rigenera</button>` : ""}<span>${st?.eval_count ? `${st.prompt_eval_count ? pesoHtml(st) + " · " : ""}${kTok(st.eval_count)} scritti${costo}` : ""}</span></div>`}</div>`;
+}
+// quanto ha letto il modello per rispondere: tutta la chat, la nota, gli estratti, le fonti citate. Oltre 100k token la chat
+// è «pesante»: ogni domanda costa e aspetta di più, e conviene aprirne una nuova
+const kTok = (n) => n >= 1000 ? fmt(n / 1000, n >= 100000 ? 0 : 1) + "k" : String(n);
+function pesoHtml(s) {
+  if (!s?.prompt_eval_count) return "";
+  const n = s.prompt_eval_count, liv = n > 100000 ? " pesante" : n > 50000 ? " medio" : "";
+  const tit = n > 100000 ? "Chat pesante: a ogni domanda il modello rilegge tutto questo. Per risparmiare tempo e soldi apri una nuova chat (la nota del workspace resta)."
+    : "Token letti dal modello per questa risposta: chat, nota, estratti e fonti citate.";
+  return `<span class="peso${liv}" title="${tit}">${kTok(n)} letti</span>`;
 }
 const PROP_IC = { crea_documento: "plus", modifica_documento: "edit", rinomina_fonte: "right", rimuovi_fonte: "trash" };
 function propHtml(p, i, k) {
@@ -799,10 +809,14 @@ async function genera(chat, freshImages) {
     // fonti indicate: il testo intero va dentro il messaggio che le indica, come un documento allegato
     const pinned = [], owner = new Map(), docs = new Map();
     for (const m of [...chat.messages].reverse()) for (const p of m.pins || []) if (!owner.has(p.fonte)) { owner.set(p.fonte, m); pinned.push(p); }
+    // si riallegano (testo e immagini) solo le fonti citate nelle ultime 3 domande: quelle di giorni fa costavano
+    // decine di migliaia di token a ogni messaggio. Le vecchie restano una riga col nome, e si possono rileggere.
+    const recenti = new Set(chat.messages.filter((m) => m.role === "user").slice(-3).flatMap((m) => (m.pins || []).map((p) => p.fonte)));
     if (pinned.length && !isSpecial()) {
       reply.phase = "leggo le fonti indicate…"; ridisegna();
       let budget = 150000;
       for (const p of pinned) {
+        if (!recenti.has(p.fonte)) continue;
         if (budget < 500) break;
         const r = await api("GET", `workspace/${wid}/fonti/${p.fonte}/intero?max=${budget}`).catch(() => null);
         if (!r) continue;
@@ -814,11 +828,11 @@ async function genera(chat, freshImages) {
         + "\n\nQuando l'utente indica una fonte, il suo testo completo è allegato al suo messaggio tra <documento> e </documento>: "
         + "è di quel documento che parla («questa scheda», «questi pannelli»…), leggilo e usalo; ha la precedenza sugli estratti. "
         + "Se ci sono anche le immagini delle pagine o la foto, per tabelle, numeri e targhette fidati delle immagini: il testo estratto può mescolare le colonne.";
-      reply.indicate = pinned.map((p) => ({ fonte: p.fonte, nome: p.nome }));
+      reply.indicate = pinned.filter((p) => recenti.has(p.fonte)).map((p) => ({ fonte: p.fonte, nome: p.nome }));
     }
     const attached = (m) => (m.pins || []).filter((p) => owner.get(p.fonte) === m).map((p) => {
       const d = docs.get(p.fonte);
-      return d ? `\n\n<documento nome="${d.nome}"${tools ? ` id="${p.fonte}"` : ""}>\n${d.testo}\n</documento>` : `\n\n[l'utente ha indicato «${p.nome}», ma il testo non è disponibile]`;
+      return d ? `\n\n<documento nome="${d.nome}"${tools ? ` id="${p.fonte}"` : ""}>\n${d.testo}\n</documento>` : (recenti.has(p.fonte) ? `\n\n[l'utente ha indicato «${p.nome}», ma il testo non è disponibile]` : `\n\n[qui l'utente citava la fonte «${p.nome}»${tools ? ` (id ${p.fonte})` : ""}: non è più allegata per intero; ` + (tools ? "se ti serve, rileggila con leggi_fonte]" : "se ti serve, chiedi all'utente di citarla di nuovo]"));
     }).join("");
     const msgs = chat.messages.slice(0, -1).filter((m) => !m.error);
     const history = msgs.map((m) => ({ role: m.role, content: timbro(m) + m.content + (m.role === "user" ? attached(m) : "") + (m.imgs?.length && m !== lastUser ? `\n[${m.imgs.length} immagine/i allegate in precedenza]` : "") }));
