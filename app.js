@@ -135,6 +135,33 @@ function campoConFonti(t, pinsDi, stacca) {
   agg();
   return t._specchio;
 }
+// ---------------------------------------------------------------- chat lunghe: compressione come fa Claude
+// Oltre ~60k token di testo, i messaggi vecchi vanno al modello come riassunto (fatto una volta da Haiku e salvato nella
+// chat); gli ultimi 20 restano interi. Tu continui a vedere tutta la chat; una riga segna fin dove il modello legge il riassunto.
+const COMPRIMI = { soglia: 240000, coda: 20 };      // caratteri della parte non riassunta · messaggi tenuti interi
+async function comprimi(chat, chiedi, fase) {
+  const ms = chat.messages, ultimo = ms.length - 1;  // l'ultimo è la risposta che sta per arrivare
+  let r = chat.riassunto && chat.riassunto.fino <= ultimo ? chat.riassunto : null;
+  const da = r ? r.fino : 0;
+  const peso = ms.slice(da, ultimo).reduce((a, m) => a + (m.error ? 0 : (m.content || "").length), 0);
+  if (peso < COMPRIMI.soglia) return r;
+  let fino = ultimo - COMPRIMI.coda;
+  while (fino > da && ms[fino].role !== "user") fino--;             // la parte intera comincia con una tua domanda
+  if (fino <= da) return r;
+  fase();
+  const blocco = ms.slice(da, fino).filter((m) => !m.error).map((m) => ({ role: m.role, content: m.content, t: m.t }));
+  const out = await chiedi({ precedente: r?.testo || "", messaggi: blocco }).catch(() => null);
+  if (!out?.testo) return r;                         // non è riuscito: per questa volta va la chat intera (o il riassunto di prima)
+  chat.riassunto = { fino, testo: out.testo, quando: Date.now() };
+  return chat.riassunto;
+}
+const REGOLA_RIASSUNTO = "\n\n## Riassunto della parte precedente di questa chat\n"
+  + "(I messaggi più vecchi non li vedi: al loro posto c'è questo riassunto. Gli ultimi messaggi seguono interi; se ti manca un dettaglio, chiedilo.)\n";
+function rigaRiassunto(chat, i) {
+  const r = chat.riassunto;
+  if (!r || r.fino !== i) return "";
+  return `<details class="riass"><summary>${svg("layers")}<span>Fin qui la chat è riassunta per il modello</span><small>${new Date(r.quando).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</small></summary><div class="md">${renderMd(r.testo)}</div></details>`;
+}
 function separatore(msgs, i) {
   const m = msgs[i]; if (!m.t) return "";
   let prima = null;
@@ -362,7 +389,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.21";
+const VERSIONE = "1.22";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -604,7 +631,7 @@ function scorri() { const c = $("corpo"); if (c) c.scrollTop = c.scrollHeight; }
 // ================================================================ chat: una conversazione
 function disegnaThread() {
   const ch = A.chat;
-  $("corpo").innerHTML = `<div class="thread" id="thread">${ch.messages.map((m, i) => separatore(ch.messages, i) + msgHtml(m, i)).join("")}</div>`;
+  $("corpo").innerHTML = `<div class="thread" id="thread">${ch.messages.map((m, i) => rigaRiassunto(ch, i) + separatore(ch.messages, i) + msgHtml(m, i)).join("")}</div>`;
   tieniPremuto($("thread"));
   legaThread();
   caricaImmagini($("corpo"));
@@ -834,7 +861,11 @@ async function genera(chat, freshImages) {
       const d = docs.get(p.fonte);
       return d ? `\n\n<documento nome="${d.nome}"${tools ? ` id="${p.fonte}"` : ""}>\n${d.testo}\n</documento>` : (recenti.has(p.fonte) ? `\n\n[l'utente ha indicato «${p.nome}», ma il testo non è disponibile]` : `\n\n[qui l'utente citava la fonte «${p.nome}»${tools ? ` (id ${p.fonte})` : ""}: non è più allegata per intero; ` + (tools ? "se ti serve, rileggila con leggi_fonte]" : "se ti serve, chiedi all'utente di citarla di nuovo]"));
     }).join("");
-    const msgs = chat.messages.slice(0, -1).filter((m) => !m.error);
+    const riass = await comprimi(chat,
+      (b) => api("POST", `workspace/${wid}/riassunto`, b, { attesa: 240e3 }),
+      () => { reply.phase = "riassumo la parte vecchia della chat…"; ridisegna(); });
+    if (riass) { system += REGOLA_RIASSUNTO + riass.testo; salvaChat(chat, wid); }
+    const msgs = chat.messages.slice(riass ? riass.fino : 0, -1).filter((m) => !m.error);
     const history = msgs.map((m) => ({ role: m.role, content: timbro(m) + m.content + (m.role === "user" ? attached(m) : "") + (m.imgs?.length && m !== lastUser ? `\n[${m.imgs.length} immagine/i allegate in precedenza]` : "") }));
     msgs.forEach((m, k) => { const imgs = (m.pins || []).filter((p) => owner.get(p.fonte) === m).flatMap((p) => docs.get(p.fonte)?.immagini || []); if (imgs.length) history[k].images = imgs; });
     if (freshImages?.length) history[history.length - 1].images = [...(history[history.length - 1].images || []), ...freshImages];

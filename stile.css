@@ -348,3 +348,12 @@ img.rotta { opacity: .2; }
 .peso.medio { color: #c9952e; }
 .peso.pesante { color: var(--danger, var(--bad, #d9534f)); font-weight: 600; }
 .peso.pesante::before { content: "● "; }
+
+/* chat lunghe: da qui in su il modello legge il riassunto */
+.riass { border: 1px dashed color-mix(in srgb, var(--ws) 45%, var(--line)); border-radius: 12px; padding: 0; background: color-mix(in srgb, var(--ws) 6%, transparent); }
+.riass summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.riass summary::-webkit-details-marker { display: none; }
+.riass summary svg { width: 15px; height: 15px; flex: none; }
+.riass summary small { margin-left: auto; font-weight: 500; color: var(--faint); }
+.riass[open] summary { border-bottom: 1px dashed color-mix(in srgb, var(--ws) 35%, var(--line)); }
+.riass .md { padding: 4px 14px 10px; font-size: 13.5px; max-height: 50vh; overflow-y: auto; }
