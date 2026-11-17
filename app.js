@@ -401,7 +401,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.23";
+const VERSIONE = "1.24";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -813,7 +813,7 @@ async function genera(chat, freshImages) {
     let system = "Rispondi in italiano, in modo chiaro e concreto. L'utente ti scrive dal telefono: vai al punto, niente preamboli." + `\n\nOggi è ${oggi()}.` + DATA_REGOLA;
     const rules = "\n\nRegole: usa note ed estratti quando sono pertinenti; quando usi un estratto citalo col suo numero tra parentesi quadre, per esempio [2]. "
       + "Se le fonti non bastano dillo chiaramente, poi rispondi con quello che sai distinguendo ciò che viene dalle fonti da ciò che è conoscenza generale. "
-      + "Non inventare numeri, date o nomi." + (wantWeb ? " Puoi usare anche i risultati della ricerca web: cita le pagine con un link." : "");
+      + "Non inventare numeri, date o nomi." + (wantWeb ? " Se ti servono informazioni dal web hai lo strumento cerca_web: usalo solo quando serve davvero (prezzi, schede tecniche, manuali, notizie), scrivi tu una ricerca breve e precisa, e cita con un link Markdown le pagine che usi." : "");
     const users = chat.messages.filter((m) => m.role === "user").slice(-2).map((m) => m.content);
     if (isTutti()) {
       reply.phase = "cerco in tutti i workspace…"; ridisegna();
@@ -891,7 +891,7 @@ async function genera(chat, freshImages) {
       history[history.length - 1].images = [...(history[history.length - 1].images || []), ...again];
     }
     history.unshift({ role: "system", content: system });
-    reply.phase = wantWeb ? "cerco sul web e penso…" : "chiedo a " + shortName(model) + "…"; ridisegna();
+    reply.phase = "chiedo a " + shortName(model) + "…"; ridisegna();
     const body = { model, messages: history, stream: true, think: false, web: wantWeb, strumenti: tools ? wid : undefined, options: { temperature: 0.6, num_predict: 32000 } };
     let buf = "";
     const w2 = await Tunnel.chiama("POST", "openrouter/chat", { corpo: body, segnale: A.ctrl.signal, attesa: 180e3, onPezzo: (testo) => {
