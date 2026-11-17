@@ -357,3 +357,11 @@ img.rotta { opacity: .2; }
 .riass summary small { margin-left: auto; font-weight: 500; color: var(--faint); }
 .riass[open] summary { border-bottom: 1px dashed color-mix(in srgb, var(--ws) 35%, var(--line)); }
 .riass .md { padding: 4px 14px 10px; font-size: 13.5px; max-height: 50vh; overflow-y: auto; }
+
+/* risultati del web che il modello non ha usato: chiusi in una riga */
+details.web-altri { display: inline-block; font-size: 12.5px; color: var(--faint); }
+details.web-altri > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 99px; border: 1px dashed var(--line); }
+details.web-altri > summary::-webkit-details-marker { display: none; }
+details.web-altri > summary svg { width: 13px; height: 13px; }
+details.web-altri[open] > summary { margin-bottom: 8px; }
+details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }

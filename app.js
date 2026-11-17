@@ -162,6 +162,18 @@ function rigaRiassunto(chat, i) {
   if (!r || r.fino !== i) return "";
   return `<details class="riass"><summary>${svg("layers")}<span>Fin qui la chat è riassunta per il modello</span><small>${new Date(r.quando).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</small></summary><div class="md">${renderMd(r.testo)}</div></details>`;
 }
+// Con il web acceso, la ricerca parte dalla tua domanda così com'è e il motore restituisce sempre qualcosa, anche fuori tema
+// («togli dalle note…» → pagine sulle recensioni). Sotto la risposta restano i link che il modello ha davvero citato nel testo;
+// gli altri stanno in una riga chiusa.
+function webUsati(m) {
+  const testo = m.content || "", usati = [], altri = [];
+  for (const w of m.web || []) {
+    let chiave = w.url;
+    try { const u = new URL(w.url); chiave = u.hostname.replace(/^www\./, "") + u.pathname.replace(/\/$/, ""); } catch {}
+    (testo.includes(w.url) || testo.includes(chiave) ? usati : altri).push(w);
+  }
+  return { usati, altri };
+}
 function separatore(msgs, i) {
   const m = msgs[i]; if (!m.t) return "";
   let prima = null;
@@ -389,7 +401,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.22";
+const VERSIONE = "1.23";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -652,7 +664,9 @@ function msgHtml(m, i) {
   if (m.thinking) body = `<details class="think"${live && !m.content ? " open" : ""}><summary>${svg("right")}${live && !m.content ? "Sta ragionando…" : `Ha ragionato${m.thinkSecs ? ` per ${fmt(m.thinkSecs)} s` : ""}`}</summary><div>${esc(m.thinking)}</div></details>` + body;
   if (m.azioni?.length) body = `<div class="acts">${m.azioni.map((a) => `<span>${svg(a.fonte ? "file" : "search")}${esc(a.testo)}</span>`).join("")}</div>` + body;
   if (m.proposte?.length) body += `<div class="props">${m.proposte.map((p, k) => propHtml(p, i, k)).join("")}</div>`;
-  const web = (m.web || []).map((w) => { let h = w.url; try { h = new URL(w.url).hostname.replace(/^www\./, ""); } catch {} return `<a class="wsrc" href="${esc(w.url)}" target="_blank" rel="noopener">${svg("globe")}${esc(w.titolo || h)}</a>`; }).join("");
+  const LINK = (w) => { let h = w.url; try { h = new URL(w.url).hostname.replace(/^www\./, ""); } catch {} return `<a class="wsrc" href="${esc(w.url)}" target="_blank" rel="noopener">${svg("globe")}${esc(w.titolo || h)}</a>`; };
+  const { usati, altri } = live ? { usati: m.web || [], altri: [] } : webUsati(m);
+  const web = usati.map(LINK).join("") + (altri.length ? `<details class="web-altri"><summary>${svg("globe")}${altri.length} ${altri.length === 1 ? "risultato" : "risultati"} del web non usati</summary><div class="lista">${altri.map(LINK).join("")}</div></details>` : "");
   const st = m.stats, costo = st?.costo ? ` · ${st.costo < 0.01 ? "<1 cent" : fmt(st.costo * 100, 1) + " cent"}` : "";
   const tags = [m.fonti?.length || m.nota ? `${m.fonti?.length || 0} fonti${m.nota ? " + nota" : ""}` : "", m.noteWs?.length ? `${m.noteWs.length} note` : "", m.usaWeb ? "web" : ""].filter(Boolean).join(" · ");
   return `<div class="msg b${live ? " live" : ""}" data-i="${i}">
