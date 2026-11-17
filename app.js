@@ -401,7 +401,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.24";
+const VERSIONE = "1.25";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -558,14 +558,47 @@ function casa() {
     ${err}
     <div class="lab">I tuoi workspace</div>
     <div class="grid">${A.wss.length ? A.wss.map((w) => `<button class="card" data-ws="${esc(w.id)}" style="--c:${esc(w.colore)}">${tile(w)}<b>${esc(w.nome)}</b><small>${w.fonti || 0} fonti${w.nota_agg ? ` · nota ${ago(w.nota_agg)}` : ""}</small></button>`).join("")
-      : A.macOk ? '<p class="vuoto">Nessun workspace: crealo dal Mac.</p>' : '<div class="card sk"></div><div class="card sk"></div><div class="card sk"></div><div class="card sk"></div>'}</div>
+      : A.macOk ? "" : '<div class="card sk"></div><div class="card sk"></div><div class="card sk"></div><div class="card sk"></div>'}${A.macOk ? `<button class="card nuovo" id="nuovoWs">${svg("plus")}<b>Nuovo workspace</b><small>Nome, icona e colore</small></button>` : ""}</div>
     <div class="specials">${Object.values(SPECIALI).map((w) => `<button class="row-ws" data-ws="${w.id}">${tile(w)}<span><b>${w.nome}</b><small>${w.sotto}</small></span>${svg("right")}</button>`).join("")}</div>
     <footer class="foot-home">${svg("key")}Cifrato dal telefono al Mac · ${esc(A.sec?.nome || "")}</footer></div>`;
   dipingiStato();
   $("app").querySelectorAll("[data-ws]").forEach((b) => b.onclick = () => apriWs(b.dataset.ws));
   $("askall").onsubmit = (e) => { e.preventDefault(); const q = $("askq").value.trim(); if (!q) return; apriWs("_tutti").then(() => { $("input").value = q; invia(); }); };
   $("menu").onclick = menu;
+  if ($("nuovoWs")) $("nuovoWs").onclick = nuovoWorkspace;
   if ($("riprova")) $("riprova").onclick = () => { A.macOk = null; casa(); carica(); };
+}
+// nuovo workspace dal telefono: come sul Mac, nome, icona e colore; poi si apre sulle fonti per aggiungere le prime
+function nuovoWorkspace() {
+  const st = { nome: "", icona: "foglia", colore: WS_COLORS[Math.floor(Math.random() * WS_COLORS.length)] };
+  const s = sheet(`<div class="nws">
+    <div class="nws-prev" style="--c:${st.colore}"><span class="tile" style="--c:${st.colore}">${svg("ws_" + st.icona)}</span><b>Nuovo workspace</b></div>
+    <input class="field" id="nwsNome" placeholder="Nome, es. Raccolta olive" maxlength="60" autocomplete="off" enterkeyhint="done">
+    <div class="lab">Icona</div><div class="nws-ic">${WS_ICONS.map((i) => `<button data-i="${i}" class="${i === st.icona ? "on" : ""}">${svg("ws_" + i)}</button>`).join("")}</div>
+    <div class="lab">Colore</div><div class="nws-col">${WS_COLORS.map((c) => `<button data-c="${c}" class="${c === st.colore ? "on" : ""}" style="--c:${c}"></button>`).join("")}</div>
+    <button class="btn main" id="nwsCrea">${svg("plus")}Crea workspace</button></div>`, "alto");
+  const prev = () => {
+    const p = s.querySelector(".nws-prev"); p.style.setProperty("--c", st.colore);
+    p.querySelector(".tile").style.setProperty("--c", st.colore); p.querySelector(".tile").innerHTML = svg("ws_" + st.icona);
+    p.querySelector("b").textContent = st.nome.trim() || "Nuovo workspace";
+    s.querySelectorAll("[data-i]").forEach((b) => b.classList.toggle("on", b.dataset.i === st.icona));
+    s.querySelectorAll("[data-c]").forEach((b) => b.classList.toggle("on", b.dataset.c === st.colore));
+    s.style.setProperty("--ws", st.colore);
+  };
+  const nome = s.querySelector("#nwsNome");
+  nome.oninput = () => { st.nome = nome.value; prev(); };
+  s.querySelectorAll("[data-i]").forEach((b) => b.onclick = () => { st.icona = b.dataset.i; prev(); });
+  s.querySelectorAll("[data-c]").forEach((b) => b.onclick = () => { st.colore = b.dataset.c; prev(); });
+  prev(); setTimeout(() => nome.focus(), 280);
+  s.querySelector("#nwsCrea").onclick = async () => {
+    if (!st.nome.trim()) { toast("Dai un nome al workspace", true); nome.focus(); return; }
+    const b = s.querySelector("#nwsCrea"); b.disabled = true; b.textContent = "Creo…";
+    try {
+      const m = await api("POST", "workspace", { nome: st.nome.trim(), icona: st.icona, colore: st.colore, modello: A.srv?.modello_predefinito || "" });
+      closeSheet(); await carica();
+      apriWs(m.id, "fonti"); toast(`«${m.nome}» creato: aggiungi le prime fonti`);
+    } catch (e) { b.disabled = false; b.innerHTML = svg("plus") + "Crea workspace"; toast(e.message, true); }
+  };
 }
 function menu() {
   const s = sheet(`<div class="menu">
@@ -740,12 +773,10 @@ function zoom(src) { sheet(`<img class="zoom" src="${esc(src)}" alt="">`, "full"
 // ================================================================ il riquadro per scrivere
 function disegnaComposer() {
   const c = $("composer"); if (!c) return;
-  const web = pref.web;
   c.innerHTML = `<div class="comp">
     ${A.pins.length || A.foto.length ? `<div class="att">${A.pins.map((p, k) => `<span class="pin">${svg(TIPO_IC[p.tipo] || "file")}${esc(p.nome)}<button data-xp="${k}">${svg("x")}</button></span>`).join("")}${A.foto.map((f, k) => `<span class="ph"><img src="${f.url}" alt=""><button data-xf="${k}">${svg("x")}</button></span>`).join("")}</div>` : ""}
     <div class="box"><button class="ib" id="cam" aria-label="Scatta una foto">${svg("camera")}</button><button class="ib" id="clip" aria-label="Foto dalla galleria">${svg("image")}</button>
       <textarea id="input" rows="1" placeholder="${A.chat ? "Rispondi…" : "Scrivi…"}" enterkeyhint="enter"></textarea>
-      <button class="ib${web ? " on" : ""}" id="web" aria-label="Web">${svg("globe")}</button>
       <button class="ib main" id="send" aria-label="Invia">${svg(A.busy ? "stop" : "up")}</button></div>
     <input type="file" id="pick" accept="image/*" multiple hidden><input type="file" id="scatto" accept="image/*" capture="environment" hidden></div>`;
   const inp = $("input");
@@ -756,7 +787,6 @@ function disegnaComposer() {
     const n = $("input"); n.value = v; n.setSelectionRange(c, c); autosize(); n.focus();
   });
   $("send").onclick = () => A.busy ? A.ctrl?.abort() : invia();
-  $("web").onclick = () => { pref.web = !pref.web; savePref(); $("web").classList.toggle("on", pref.web); toast(pref.web ? "Cerca anche sul web" : "Senza web"); };
   $("clip").onclick = () => $("pick").click();
   $("cam").onclick = () => $("scatto").click();       // apre direttamente la fotocamera posteriore
   for (const id of ["pick", "scatto"]) $(id).onchange = async () => { for (const f of $(id).files) A.foto.push(await toJpeg(f)); disegnaComposer(); $("input").focus(); };
@@ -802,8 +832,7 @@ async function genera(chat, freshImages) {
   const model = modello(), info = minfo(model), wid = A.wid, w = ws();
   const lastUser = [...chat.messages].reverse().find((m) => m.role === "user");
   const reply = { role: "assistant", content: "", model, phase: "", t: Date.now() };
-  const wantWeb = pref.web || WEB_RE.test(lastUser?.content || "");
-  if (wantWeb) reply.usaWeb = true;
+  const wantWeb = A.srv?.web_motore !== "spento";        // il web è uno strumento: il modello cerca solo quando serve
   chat.messages.push(reply); chat.updated = Date.now();
   A.busy = true; A.ctrl = new AbortController();
   const ridisegna = () => { if (A.chat !== chat || A.tab !== "chat") return; const row = $("thread")?.querySelector(`.msg[data-i="${chat.messages.length - 1}"]`); if (row) { row.outerHTML = msgHtml(reply, chat.messages.length - 1); } const t = $("corpo"); if (t && t.scrollHeight - t.scrollTop - t.clientHeight < 220) scorri(); };
@@ -908,7 +937,7 @@ async function genera(chat, freshImages) {
         if (m.citazioni) reply.web = [...(reply.web || []), ...m.citazioni];
         if (m.azione) { (reply.azioni ||= []).push(m.azione); reply.phase = m.azione.testo.toLowerCase() + "…"; }
         if (m.proposta) (reply.proposte ||= []).push(m.proposta);
-        if (j.done) reply.stats = j;
+        if (j.done) { reply.stats = j; if (j.ricerche_web) reply.usaWeb = true; }
       }
       const now = performance.now();
       if (now - lastPaint > 90) { lastPaint = now; ridisegna(); }

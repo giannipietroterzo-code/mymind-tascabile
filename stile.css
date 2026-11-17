@@ -365,3 +365,19 @@ details.web-altri > summary::-webkit-details-marker { display: none; }
 details.web-altri > summary svg { width: 13px; height: 13px; }
 details.web-altri[open] > summary { margin-bottom: 8px; }
 details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* nuovo workspace dal telefono */
+.card.nuovo { border-style: dashed; background: none; color: var(--muted); align-items: flex-start; justify-content: center; }
+.card.nuovo svg.i { width: 26px; height: 26px; margin-bottom: 4px; }
+.nws { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px 6px; }
+.nws-prev { display: flex; align-items: center; gap: 12px; }
+.nws-prev b { font-size: 18px; font-weight: 400; }
+.nws .lab { margin: 6px 2px 0; }
+.nws-ic { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px; max-height: 196px; overflow-y: auto; }
+.nws-ic button { aspect-ratio: 1; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); display: grid; place-items: center; color: var(--muted); }
+.nws-ic button svg.i { width: 22px; height: 22px; }
+.nws-ic button.on { border-color: var(--ws); color: var(--ws); background: color-mix(in srgb, var(--ws) 14%, var(--panel)); }
+.nws-col { display: flex; flex-wrap: wrap; gap: 10px; }
+.nws-col button { width: 34px; height: 34px; border-radius: 50%; background: var(--c); border: 3px solid var(--panel); box-shadow: 0 0 0 1px var(--line); }
+.nws-col button.on { box-shadow: 0 0 0 2px var(--text); }
+.nws #nwsCrea { margin-top: 6px; background: var(--ws); border-color: var(--ws); color: #fff; }
