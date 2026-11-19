@@ -187,18 +187,22 @@ function applicaTema() {
 applicaTema(); matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applicaTema);
 
 // ================================================================ foglio dal basso (scelte, conferme, anteprime)
+// Ogni foglio aperto mette un passo nella cronologia, così il tasto Indietro di Android lo chiude. Chiudendolo da un
+// bottone si torna indietro di quel passo, ma il «torna indietro» arriva dopo: se intanto si è aperto un altro foglio
+// (Rinomina → «Nuovo nome», Togli → conferma), quel ritorno lo chiudeva subito. Ora il ritorno atteso si riconosce.
+let popAtteso = false;
 function sheet(html, cls = "") {
   $("sheet").className = "open " + cls; $("sheet").innerHTML = `<div class="grip"></div>${html}`;
   $("sheet-bg").className = "open";
   $("sheet-bg").onclick = closeSheet;
-  history.pushState({ sheet: 1 }, "");
+  if (!popAtteso && !history.state?.sheet) history.pushState({ sheet: 1 }, "");
   return $("sheet");
 }
 function closeSheet(fromPop) {
   if (!$("sheet").classList.contains("open")) return;
   $("sheet").className = ""; $("sheet-bg").className = "";
   setTimeout(() => { if (!$("sheet").classList.contains("open")) $("sheet").innerHTML = ""; }, 260);
-  if (fromPop !== true && history.state?.sheet) history.back();
+  if (fromPop !== true && history.state?.sheet) { popAtteso = true; history.back(); }
 }
 function ask(testo, ok = "Conferma", danger = false) {
   return new Promise((res) => {
@@ -401,7 +405,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.25";
+const VERSIONE = "1.26";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -1151,6 +1155,11 @@ async function apriFonte(f, wid) {
 
 // ================================================================ indietro di Android, avvio
 addEventListener("popstate", (e) => {
+  if (popAtteso) {                                     // è il ritorno chiesto da closeSheet, non il tasto Indietro
+    popAtteso = false;
+    if ($("sheet").classList.contains("open")) history.pushState({ sheet: 1 }, "");   // nel frattempo se n'è aperto un altro
+    return;
+  }
   if ($("sheet").classList.contains("open")) return closeSheet(true);
   if (!A.sec) return;
   if (A.busy && A.chat) { history.pushState({ v: "chat" }, ""); return toast("Sta rispondendo: aspetta o premi ■"); }
