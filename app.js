@@ -405,7 +405,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.26";
+const VERSIONE = "1.27";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -528,13 +528,14 @@ async function carica() {
     for (const id of Object.keys(SPECIALI)) api("GET", `workspace/${id}`).then((m) => { if (m.modello) SPECIALI[id].modello = m.modello; }).catch(() => {});
   } catch (e) { A.macOk = 0; A.macErr = e.message; }
   if (!A.wid) casa(); else dipingiStato();
+  if (A.macOk) { condivisoInArrivo().then((c) => { if (c) annotaSheet(c); caricaAvvisi(); }); }
 }
 function dipingiStato() {
   const el = $("stato"); if (!el) return;
   const s = A.statoTunnel;
   const [cls, txt] = s !== "collegato" ? ["off", s === "collego" ? "collego…" : "fuori linea"]
     : A.macOk ? ["on", "Mac in linea"] : A.macOk === 0 ? ["bad", "il Mac non risponde"] : ["off", "chiedo al Mac…"];
-  el.className = "stato " + cls; el.innerHTML = `<i></i>${txt}`;
+  el.className = "stato " + cls; el.innerHTML = `<i></i><span>${txt}</span>`; el.title = txt;
 }
 function blocca() {
   if (nuovaVersione && !daSalvare.size) return aggiorna();   // è il momento giusto per la versione nuova, ma non con una chat da salvare
@@ -556,9 +557,10 @@ function casa() {
   A.wid = null; A.chat = null; tinta("#c15f3c");
   const err = A.macOk === 0 ? `<div class="banner bad">${svg("power")}<div><b>Il Mac non risponde.</b> ${esc(A.macErr || "")} Deve essere acceso, sveglio e con MyMind avviato.<button class="btn sm" id="riprova">Riprova</button></div></div>` : "";
   $("app").innerHTML = `<div class="home">
-    <header class="top"><div class="brand">${LOGO}<b>MyMind</b>${versioneHtml()}</div><span id="stato" class="stato"></span><button class="ib" id="menu">${svg("dots")}</button></header>
+    <header class="top"><div class="brand">${LOGO}<b>MyMind</b>${versioneHtml()}</div><span id="stato" class="stato"></span><button class="ib campana" id="avvisiBtn" aria-label="Da ricordare">${svg("bell")}<i id="avvisiN"></i></button><button class="ib" id="menu">${svg("dots")}</button></header>
     <section class="hero">
-      <form class="askall" id="askall"><span>${svg("layers")}</span><input id="askq" placeholder="Chiedi a tutti i workspace…" enterkeyhint="send" autocomplete="off"><button class="ib main" aria-label="Chiedi">${svg("up")}</button></form></section>
+      <form class="askall" id="askall"><span>${svg("layers")}</span><input id="askq" placeholder="Chiedi a tutti i workspace…" enterkeyhint="send" autocomplete="off"><button class="ib main" aria-label="Chiedi">${svg("up")}</button></form>
+      <button class="annota" id="annota"><span class="ic">${svg("edit")}</span><span class="tx"><b>Annota al volo</b><small>Un pensiero, una misura, una foto: lo metto io al posto giusto</small></span><span class="mic">${svg("mic")}</span></button></section>
     ${err}
     <div class="lab">I tuoi workspace</div>
     <div class="grid">${A.wss.length ? A.wss.map((w) => `<button class="card" data-ws="${esc(w.id)}" style="--c:${esc(w.colore)}">${tile(w)}<b>${esc(w.nome)}</b><small>${w.fonti || 0} fonti${w.nota_agg ? ` · nota ${ago(w.nota_agg)}` : ""}</small></button>`).join("")
@@ -569,6 +571,9 @@ function casa() {
   $("app").querySelectorAll("[data-ws]").forEach((b) => b.onclick = () => apriWs(b.dataset.ws));
   $("askall").onsubmit = (e) => { e.preventDefault(); const q = $("askq").value.trim(); if (!q) return; apriWs("_tutti").then(() => { $("input").value = q; invia(); }); };
   $("menu").onclick = menu;
+  $("annota").onclick = () => annotaSheet();
+  $("avvisiBtn").onclick = () => mostraAvvisi(true);
+  dipingiAvvisi();
   if ($("nuovoWs")) $("nuovoWs").onclick = nuovoWorkspace;
   if ($("riprova")) $("riprova").onclick = () => { A.macOk = null; casa(); carica(); };
 }
@@ -603,6 +608,143 @@ function nuovoWorkspace() {
       apriWs(m.id, "fonti"); toast(`«${m.nome}» creato: aggiungi le prime fonti`);
     } catch (e) { b.disabled = false; b.innerHTML = svg("plus") + "Crea workspace"; toast(e.message, true); }
   };
+}
+// ================================================================ secondo cervello: annota al volo, condividi, avvisi
+// ---------------------------------------------------------------- annota al volo
+// Scrivi (o detti, o fotografi) senza scegliere dove: il Mac decide il workspace e il custode della nota lo sistema.
+// Se non è sicuro te lo chiede. Le foto vanno tra le fonti del workspace scelto.
+function annotaSheet(pre = {}) {
+  const st = { ws: pre.ws || "", foto: pre.foto || [], id: null, ascolto: null };
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const s = sheet(`<div class="an">
+    <h3 class="sh">${svg("edit")}Annota al volo</h3>
+    <textarea id="anTesto" rows="4" placeholder="Es. oggi ho montato il Gewiss C63, non scatta più">${esc(pre.testo || "")}</textarea>
+    <div class="an-foto" id="anFoto"></div>
+    <div class="an-btns">${SR ? `<button class="btn" id="anMic">${svg("mic")}Detta</button>` : ""}<button class="btn" id="anCam">${svg("camera")}Scatta</button><button class="btn" id="anGal">${svg("image")}Galleria</button></div>
+    <div class="lab">Dove</div>
+    <div class="chipsrow" id="anWs"></div>
+    <p class="an-msg" id="anMsg"></p>
+    <button class="btn main" id="anSalva">${svg("ok")}Salva</button>
+    <input type="file" id="anCamIn" accept="image/*" capture="environment" hidden><input type="file" id="anGalIn" accept="image/*" multiple hidden></div>`, "tall");
+  const q = (x) => s.querySelector(x), testo = q("#anTesto");
+  const chips = (evidenzia) => {
+    q("#anWs").innerHTML = `<button data-w="" class="${st.ws ? "" : "on"}">${svg("spark")}Decidi tu</button>` + A.wss.map((w) => `<button data-w="${esc(w.id)}" class="${st.ws === w.id ? "on" : ""}${evidenzia === w.id ? " prop" : ""}">${esc(w.nome)}</button>`).join("");
+    q("#anWs").querySelectorAll("[data-w]").forEach((b) => b.onclick = () => { st.ws = b.dataset.w; chips(evidenzia); });
+  };
+  const foto = () => {
+    q("#anFoto").innerHTML = st.foto.map((f, k) => `<span class="ph"><img src="${f.url}" alt=""><button data-x="${k}">${svg("x")}</button></span>`).join("");
+    q("#anFoto").querySelectorAll("[data-x]").forEach((b) => b.onclick = () => { st.foto.splice(+b.dataset.x, 1); foto(); });
+  };
+  chips(); foto();
+  setTimeout(() => { if (!pre.testo) testo.focus(); }, 280);
+  q("#anCam").onclick = () => q("#anCamIn").click();
+  q("#anGal").onclick = () => q("#anGalIn").click();
+  for (const id of ["#anCamIn", "#anGalIn"]) q(id).onchange = async () => { for (const f of q(id).files) st.foto.push(await toJpeg(f, 2400)); foto(); };
+  if (SR) q("#anMic").onclick = () => {
+    if (st.ascolto) { st.ascolto.stop(); return; }
+    const r = new SR(), base = testo.value ? testo.value.replace(/\s*$/, " ") : "";
+    r.lang = "it-IT"; r.interimResults = true; r.continuous = true;
+    r.onresult = (e) => { testo.value = base + [...e.results].map((x) => x[0].transcript).join(""); };
+    r.onend = () => { st.ascolto = null; q("#anMic")?.classList.remove("on"); if (q("#anMic")) q("#anMic").innerHTML = svg("mic") + "Detta"; };
+    r.onerror = (e) => { if (e.error !== "aborted" && e.error !== "no-speech") toast("Dettatura non riuscita: " + e.error, true); };
+    try { r.start(); st.ascolto = r; q("#anMic").classList.add("on"); q("#anMic").innerHTML = svg("mic") + "Ti ascolto… tocca per finire"; } catch { toast("Il microfono non parte", true); }
+  };
+  q("#anSalva").onclick = async () => {
+    st.ascolto?.stop();
+    const t = testo.value.trim(), b = q("#anSalva");
+    if (!t && !st.foto.length) { toast("Scrivi qualcosa o aggiungi una foto", true); return; }
+    if (!t && !st.ws) { q("#anMsg").textContent = "Una foto senza testo non so dove metterla: scegli il workspace."; return; }
+    b.disabled = true; b.innerHTML = `<span class="spin"></span>${t ? "Lo metto al posto giusto…" : "Mando le foto…"}`;
+    try {
+      let ws = st.ws, nome = A.wss.find((w) => w.id === ws)?.nome, righe = 0;
+      if (t) {
+        const r = await api("POST", "annota", { testo: t, ws: st.ws || undefined, id: st.id || undefined }, { attesa: 150e3 });
+        if (r.stato === "da_smistare") {
+          st.id = r.id; b.disabled = false; b.innerHTML = svg("ok") + "Salva";
+          q("#anMsg").textContent = r.proposto ? "Non sono sicuro di dove va: ti propongo quello evidenziato, scegli tu." : "Non capisco a quale workspace appartiene: scegli tu.";
+          if (r.proposto) st.ws = r.proposto;
+          chips(r.proposto); return;
+        }
+        ws = r.ws; nome = r.nome; righe = (r.modifiche || []).length;
+      }
+      for (const f of st.foto) await api("POST", `workspace/${ws}/carica?nome=${encodeURIComponent("Foto " + new Date().toLocaleString("it-IT").replace(/[/:]/g, "-") + ".jpg")}`, null, { corpo: new Uint8Array(await f.blob.arrayBuffer()), ct: "image/jpeg", attesa: 180e3 });
+      closeSheet();
+      toast(`${t ? "Annotato" : "Foto aggiunte"} in «${nome}»${st.foto.length && t ? ` · ${st.foto.length} foto tra le fonti` : ""}`);
+      navigator.vibrate?.([10, 60, 10]);
+      carica();
+    } catch (e) { b.disabled = false; b.innerHTML = svg("ok") + "Salva"; toast(e.message, true); }
+  };
+}
+// «Condividi → MyMind» da un'altra app: il service worker ha messo da parte testo e foto, qui li riprendo e li cancello
+async function condivisoInArrivo() {
+  try {
+    if (!(await caches.has("mmt-condiviso"))) return null;
+    const c = await caches.open("mmt-condiviso"), out = { testo: "", foto: [] };
+    for (const req of await c.keys()) {
+      const r = await c.match(req), nome = new URL(req.url).pathname.split("/").pop();
+      if (nome === "testo") out.testo = await r.text();
+      else out.foto.push(await toJpeg(await r.blob(), 2400));
+    }
+    await caches.delete("mmt-condiviso");
+    return out.testo || out.foto.length ? out : null;
+  } catch { return null; }
+}
+
+// ---------------------------------------------------------------- avvisi all'apertura
+// Scadenze e cose aperte che il Mac legge dalle note. Niente notifiche: un foglio alla prima apertura del giorno,
+// e la campanella in alto per rivederli. «Fatto» lo scrive nella nota; «Nascondi» lo toglie solo da questo telefono.
+const nascosti = () => { try { return JSON.parse(localStorage.getItem("mmt-avvisi-nascosti") || "{}"); } catch { return {}; } };
+function avvisiScelti() {
+  const a = A.avvisi; if (!a) return { ritardo: [], oggi: [], prossimi: [], aperte: [], n: 0 };
+  const via = nascosti(), g = (d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+  const voci = a.voci.filter((v) => !via[v.id]);
+  const conData = voci.filter((v) => v.data).sort((x, y) => x.data.localeCompare(y.data));
+  const r = {
+    ritardo: conData.filter((v) => v.data < a.oggi && v.data >= g(a.oggi, -10)),
+    oggi: conData.filter((v) => v.data === a.oggi),
+    prossimi: conData.filter((v) => v.data > a.oggi && v.data <= g(a.oggi, 7)),
+    aperte: voci.filter((v) => !v.data),
+  };
+  r.n = r.ritardo.length + r.oggi.length + r.prossimi.length;
+  return r;
+}
+function dipingiAvvisi() {
+  const el = $("avvisiN"); if (!el) return;
+  const s = avvisiScelti(), n = s.n;
+  el.textContent = n || ""; el.className = n ? (s.ritardo.length || s.oggi.length ? "caldo" : "") : "vuoto";
+}
+async function caricaAvvisi(riprova = true) {
+  try { A.avvisi = await api("GET", "avvisi"); } catch { return; }
+  dipingiAvvisi();
+  if (A.avvisi.aggiorno && riprova) setTimeout(() => caricaAvvisi(false), 30e3);     // il Mac sta rileggendo una nota cambiata
+  const giorno = A.avvisi.oggi;
+  if (localStorage.getItem("mmt-avvisi-giorno") !== giorno && avvisiScelti().n && !A.wid && !$("sheet").classList.contains("open")) {
+    localStorage.setItem("mmt-avvisi-giorno", giorno);
+    mostraAvvisi(false);
+  }
+}
+function mostraAvvisi(tutti) {
+  const s0 = avvisiScelti();
+  const quando = (d) => new Date(d + "T12:00").toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" });
+  const riga = (v) => `<div class="av" data-id="${v.id}"><button class="av-t" data-ws="${esc(v.ws)}"><i style="--c:${esc(v.colore || "#999")}"></i><span><b>${esc(v.testo)}</b><small>${esc(v.nome)}${v.data ? " · " + quando(v.data) : ""}</small></span></button><button class="av-b ok" data-fatto title="Fatto">${svg("ok")}</button><button class="av-b" data-via title="Nascondi">${svg("x")}</button></div>`;
+  const gruppo = (tit, voci, cls = "") => voci.length ? `<div class="lab ${cls}">${tit}</div>${voci.map(riga).join("")}` : "";
+  const corpo = gruppo("In ritardo", s0.ritardo, "rosso") + gruppo("Oggi", s0.oggi, "oro") + gruppo("Nei prossimi 7 giorni", s0.prossimi)
+    + (tutti ? gruppo("Ancora aperte, senza data", s0.aperte) : "");
+  const s = sheet(`<div class="avvisi"><h3 class="sh">${svg("bell")}Da ricordare</h3>
+    ${corpo || '<p class="vuoto">Niente in scadenza. Le cose aperte senza data le trovi qui sotto quando ci sono.</p>'}
+    ${!tutti && s0.aperte.length ? `<button class="btn" id="avTutti">Vedi anche le ${s0.aperte.length} cose aperte senza data</button>` : ""}</div>`, "tall");
+  if (s.querySelector("#avTutti")) s.querySelector("#avTutti").onclick = () => mostraAvvisi(true);
+  s.querySelectorAll(".av").forEach((el) => {
+    const v = A.avvisi.voci.find((x) => x.id === el.dataset.id);
+    const togli = () => { const n = nascosti(); n[v.id] = Date.now(); localStorage.setItem("mmt-avvisi-nascosti", JSON.stringify(n)); el.remove(); dipingiAvvisi(); };
+    el.querySelector("[data-ws]").onclick = () => { closeSheet(); apriWs(v.ws, "nota"); };
+    el.querySelector("[data-via]").onclick = togli;
+    el.querySelector("[data-fatto]").onclick = async (e) => {
+      const b = e.currentTarget; b.disabled = true; b.innerHTML = '<span class="spin"></span>';
+      try { await api("POST", "annota", { testo: "Fatto: " + v.testo, ws: v.ws }, { attesa: 150e3 }); togli(); toast(`Segnato come fatto in «${v.nome}»`); }
+      catch (err) { b.disabled = false; b.innerHTML = svg("ok"); toast(err.message, true); }
+    };
+  });
 }
 function menu() {
   const s = sheet(`<div class="menu">
