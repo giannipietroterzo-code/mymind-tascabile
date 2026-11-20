@@ -92,17 +92,22 @@ function svg(name, cls = "") {
   return `<svg class="i ${cls}" viewBox="0 0 24 24">${I[name] || I.file}</svg>`;
 }
 
-// Logo di MyMind: cinque nodi collegati a forma di M, in terracotta su avorio pieno. Colori fissi, uguali in ogni palette;
-// il filo sottile del bordo lo stacca dai fondi chiari.
-const LOGO_INTERNO = `<rect x=".75" y=".75" width="46.5" height="46.5" rx="13.25" fill="#f8f2e6" stroke="#e2d4b8" stroke-width="1.5"/>
-  <path d="M13 35L15 14L24 27L33 14L35 35" stroke="#c15f3c" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
-  <g fill="#c15f3c"><circle cx="13" cy="35" r="3"/><circle cx="15" cy="14" r="3"/><circle cx="24" cy="27" r="3.4"/><circle cx="33" cy="14" r="3"/><circle cx="35" cy="35" r="3"/></g>`;
+// Logo di MyMind: una costellazione. Punti collegati da linee sottili (gli argomenti e i rimandi tra loro), uno più grande
+// e acceso. I colori vengono dallo stile in uso (variabili --lg-*): ambra su grigio caldo con Tech, terracotta su avorio
+// con gli altri. L'icona dell'app sul telefono è la versione Tech scura (tascabile/icone/).
+const LOGO_DISEGNO = (c) => `<rect x=".75" y=".75" width="46.5" height="46.5" rx="11" style="fill:${c.bg};stroke:${c.line}" stroke-width="1.5"/>
+  <path d="M13 34L24 14L35 30L13 34M35 30L38 16L24 14" style="stroke:${c.ink}" stroke-width="1.6" stroke-linejoin="round" opacity=".75"/>
+  <g style="fill:${c.ink}"><circle cx="13" cy="34" r="2.9"/><circle cx="35" cy="30" r="2.9"/><circle cx="38" cy="16" r="2.3"/></g>
+  <circle cx="24" cy="14" r="4.5" style="fill:${c.acc}"/>`;
+const LOGO_INTERNO = LOGO_DISEGNO({ bg: "var(--lg-bg)", line: "var(--lg-line)", ink: "var(--lg-ink)", acc: "var(--lg-acc)" });
 const LOGO = `<svg viewBox="0 0 48 48" fill="none">${LOGO_INTERNO}</svg>`;
-// icona della scheda del browser: lo stesso disegno
+// icona della scheda del browser: lo stesso disegno, coi colori dello stile letti in questo momento
 function paintFavicon() {
   let l = document.querySelector("link[rel=icon]");
   if (!l) { l = document.createElement("link"); l.rel = "icon"; document.head.appendChild(l); }
-  l.href = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">${LOGO_INTERNO}</svg>`);
+  const cs = getComputedStyle(document.documentElement), v = (n, d) => cs.getPropertyValue(n).trim() || d;
+  const c = { bg: v("--lg-bg", "#1f1e1c"), line: v("--lg-line", "#3b3935"), ink: v("--lg-ink", "#a9a59b"), acc: v("--lg-acc", "#f5c518") };
+  l.href = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">${LOGO_DISEGNO(c)}</svg>`);
 }
 const BRAIN_LINE = '<path d="M11 4c-4.5 0-8 3.6-8 8.3S6.5 20 11 20"/><path d="M13 4c4.5 0 8 3.6 8 8.3S17.5 20 13 20"/><path d="M11 8.5c-2 0-3.7.6-4.7 2M11 13c-2.3 0-4.3.8-5.3 2.3M13 8.5c2 0 3.7.6 4.7 2M13 13c2.3 0 4.3.8 5.3 2.3"/>';
 I.brain = BRAIN_LINE;

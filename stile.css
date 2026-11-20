@@ -537,3 +537,9 @@ details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
 [data-stile="tech"] .md code, [data-stile="tech"] .md .etic { border-radius: 4px; }
 [data-stile="tech"] .dots i.on { background: var(--acc); border-color: var(--acc); }
 [data-stile="tech"] .specchio mark { background: color-mix(in srgb, var(--acc) 30%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acc) 30%, transparent), 0 0 0 3px color-mix(in srgb, var(--acc) 55%, transparent); }
+
+
+/* colori del logo (la costellazione): seguono lo stile */
+:root { --lg-bg: #f8f2e6; --lg-line: #e2d4b8; --lg-ink: #9a8a74; --lg-acc: #c15f3c; }
+:root[data-stile="tech"] { --lg-bg: #1f1e1c; --lg-line: #3b3935; --lg-ink: #a9a59b; --lg-acc: #f5c518; }
+:root[data-stile="tech"][data-theme="light"] { --lg-bg: #f4f3ef; --lg-line: #c4c0b7; --lg-ink: #5c5952; --lg-acc: #e0aa00; }
