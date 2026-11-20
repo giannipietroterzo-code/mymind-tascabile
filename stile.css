@@ -477,7 +477,7 @@ details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
 
 
 /* =================================================================== stile Tech (menu ⋯ → Stile)
-   Grigi caldi e un solo accento giallo ambra. Angoli netti, bordi sottili, etichette e numeri in monospaziato, una griglia
+   Grigi caldi e un solo accento giallo ambra. Angoli netti, bordi sottili, una barretta gialla davanti alle etichette, una griglia
    di puntini appena visibile. Il colore del workspace resta sulla sua tessera; tutto il resto parla in giallo. */
 :root[data-stile="tech"] {
   --bg: #e8e6e1; --panel: #f4f3ef; --panel-2: #dad7d0; --line: #c4c0b7; --text: #1a1917; --muted: #5c5952; --faint: #8f8b82;
@@ -512,13 +512,11 @@ details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
 [data-stile="tech"] .card.nuovo::after, [data-stile="tech"] .card.sk::after { display: none; }
 [data-stile="tech"] :is(.card, .row-ws, .li, .pa, .askall, .annota, .duo button) { box-shadow: none; }
 
-/* etichette e numeri in monospaziato: è il segno «tech», senza maiuscole strette */
-[data-stile="tech"] .lab { font: 600 11px/1 var(--mono); letter-spacing: .1em; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+/* etichette: stesso carattere del resto, con una barretta gialla davanti */
+[data-stile="tech"] .lab { font: 700 11.5px/1 var(--sans); letter-spacing: .08em; color: var(--muted); display: flex; align-items: center; gap: 7px; }
 [data-stile="tech"] .lab::before { content: ""; width: 5px; height: 11px; background: var(--acc); border-radius: 1px; flex: none; }
 [data-stile="tech"] .lab.rosso::before { background: var(--bad); } [data-stile="tech"] .lab.sa-ws::before { display: none; }
-[data-stile="tech"] :is(.ver, .mfoot span, .peso, .li small, .pa small, .av-t small, .di-v .h, .di-v small, .sa-p small, .who small, .in-attesa, .foot-home, .di-giorni button small) { font-family: var(--mono); font-size: 11.5px; letter-spacing: -.02em; }
 [data-stile="tech"] .ver { border-color: var(--line); color: var(--muted); }
-[data-stile="tech"] .mfoot span { font-size: 10.5px; text-align: right; line-height: 1.4; } [data-stile="tech"] .mfoot { gap: 6px; }
 [data-stile="tech"] .wsv body, [data-stile="tech"] #corpo .thread { background: none; }
 [data-stile="tech"] .brand b { letter-spacing: -.01em; font-weight: 600; }
 
