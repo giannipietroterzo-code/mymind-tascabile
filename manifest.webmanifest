@@ -52,5 +52,20 @@
         }
       ]
     }
-  }
+  },
+  "shortcuts": [
+    {
+      "name": "Annota al volo",
+      "short_name": "Annota",
+      "description": "Un appunto senza sbloccare",
+      "url": "./?annota=1",
+      "icons": [
+        {
+          "src": "icone/icona-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
 }

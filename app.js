@@ -405,7 +405,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.27";
+const VERSIONE = "1.28";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -493,6 +493,7 @@ function creaPin(segreto) {
       pinPad({ titolo: "Ripetilo", sotto: "Lo stesso PIN, per sicurezza.", onPin: async (p2) => {
         if (p1 !== p2) { creaPin(segreto); toast("I due PIN non coincidono: rifallo", true); return; }
         await Cassa.chiudi(p1, segreto);
+        await Busta.svuota(); await Busta.prepara(p1, segreto).catch(() => {});      // abbinamento nuovo: chiavi nuove
         await entra(segreto);
         toast("Telefono abbinato");
       } });
@@ -500,10 +501,11 @@ function creaPin(segreto) {
 }
 function sblocca() {
   const c = Cassa.c();
-  pinPad({ titolo: "MyMind", sotto: `${esc(c?.nome || "Telefono")} · inserisci il PIN`, onPin: async (p) => entra(await Cassa.apri(p)),
-    extra: `<button class="link" id="dimentica">Ho dimenticato il PIN</button>` });
+  pinPad({ titolo: "MyMind", sotto: `${esc(c?.nome || "Telefono")} · inserisci il PIN`, onPin: async (p) => { const sec = await Cassa.apri(p); await Busta.prepara(p, sec).catch(() => {}); entra(sec); },
+    extra: `${Busta.pronta() ? `<button class="lock-an" id="lockAnnota">${svg("edit")}<span><b>Annota senza sbloccare</b><small class="in-attesa"></small></span>${svg("mic")}</button>` : ""}<button class="link" id="dimentica">Ho dimenticato il PIN</button>` });
+  if ($("lockAnnota")) { $("lockAnnota").onclick = (e) => annotaSheet({ detta: !!e.target.closest("svg:last-child") }); dipingiAttesa(); }
   $("dimentica").onclick = async () => {
-    if (await ask("Senza PIN la chiave non si recupera: cancello l'abbinamento e lo rifai dal Mac (Impostazioni → Telefono, ovunque).", "Cancella", true)) { Cassa.cancella(); avvio(); }
+    if (await ask("Senza PIN la chiave non si recupera: cancello l'abbinamento e lo rifai dal Mac (Impostazioni → Telefono, ovunque).", "Cancella", true)) { Cassa.cancella(); Busta.svuota(); avvio(); }
   };
 }
 function nessunAbbinamento() {
@@ -521,14 +523,14 @@ async function entra(segreto) {
   A.wid = null; casa();
   carica();
 }
-async function carica() {
+async function carica(zitto) {
   try {
     const [wss, srv, modelli] = await Promise.all([api("GET", "workspace"), api("GET", "impostazioni").catch(() => ({})), api("GET", "openrouter/modelli").catch(() => [])]);
     A.wss = wss.sort((a, b) => (b.nota_agg || b.creato || 0) - (a.nota_agg || a.creato || 0)); A.srv = srv; A.modelli = modelli; A.macOk = Date.now();
     for (const id of Object.keys(SPECIALI)) api("GET", `workspace/${id}`).then((m) => { if (m.modello) SPECIALI[id].modello = m.modello; }).catch(() => {});
   } catch (e) { A.macOk = 0; A.macErr = e.message; }
-  if (!A.wid) casa(); else dipingiStato();
-  if (A.macOk) { condivisoInArrivo().then((c) => { if (c) annotaSheet(c); caricaAvvisi(); }); }
+  if (!A.wid && !(zitto && $("sheet").classList.contains("open"))) casa(); else dipingiStato();
+  if (A.macOk && !zitto) { condivisoInArrivo().then((c) => { if (c) annotaSheet(c); caricaAvvisi(); }); caricaPosta(); svuotaCoda(); }
 }
 function dipingiStato() {
   const el = $("stato"); if (!el) return;
@@ -540,6 +542,7 @@ function dipingiStato() {
 function blocca() {
   if (nuovaVersione && !daSalvare.size) return aggiorna();   // è il momento giusto per la versione nuova, ma non con una chat da salvare
   Tunnel.ferma(); A.sec = null; A.chat = null; A.wid = null;
+  $("sheet").className = ""; $("sheet-bg").className = ""; $("sheet").innerHTML = "";   // niente fogli aperti sopra la schermata di blocco
   blobs.forEach((u) => URL.revokeObjectURL(u)); blobs.clear();
   sblocca();
 }
@@ -560,8 +563,10 @@ function casa() {
     <header class="top"><div class="brand">${LOGO}<b>MyMind</b>${versioneHtml()}</div><span id="stato" class="stato"></span><button class="ib campana" id="avvisiBtn" aria-label="Da ricordare">${svg("bell")}<i id="avvisiN"></i></button><button class="ib" id="menu">${svg("dots")}</button></header>
     <section class="hero">
       <form class="askall" id="askall"><span>${svg("layers")}</span><input id="askq" placeholder="Chiedi a tutti i workspace…" enterkeyhint="send" autocomplete="off"><button class="ib main" aria-label="Chiedi">${svg("up")}</button></form>
-      <button class="annota" id="annota"><span class="ic">${svg("edit")}</span><span class="tx"><b>Annota al volo</b><small>Un pensiero, una misura, una foto: lo metto io al posto giusto</small></span><span class="mic">${svg("mic")}</span></button></section>
+      <button class="annota" id="annota"><span class="ic">${svg("edit")}</span><span class="tx"><b>Annota al volo</b><small>Un pensiero, una misura, una foto: lo metto io al posto giusto</small></span><span class="mic" id="annotaMic">${svg("mic")}</span></button>
+      <p class="in-attesa"></p></section>
     ${err}
+    <div id="posta"></div>
     <div class="lab">I tuoi workspace</div>
     <div class="grid">${A.wss.length ? A.wss.map((w) => `<button class="card" data-ws="${esc(w.id)}" style="--c:${esc(w.colore)}">${tile(w)}<b>${esc(w.nome)}</b><small>${w.fonti || 0} fonti${w.nota_agg ? ` · nota ${ago(w.nota_agg)}` : ""}</small></button>`).join("")
       : A.macOk ? "" : '<div class="card sk"></div><div class="card sk"></div><div class="card sk"></div><div class="card sk"></div>'}${A.macOk ? `<button class="card nuovo" id="nuovoWs">${svg("plus")}<b>Nuovo workspace</b><small>Nome, icona e colore</small></button>` : ""}</div>
@@ -571,7 +576,8 @@ function casa() {
   $("app").querySelectorAll("[data-ws]").forEach((b) => b.onclick = () => apriWs(b.dataset.ws));
   $("askall").onsubmit = (e) => { e.preventDefault(); const q = $("askq").value.trim(); if (!q) return; apriWs("_tutti").then(() => { $("input").value = q; invia(); }); };
   $("menu").onclick = menu;
-  $("annota").onclick = () => annotaSheet();
+  $("annota").onclick = (e) => annotaSheet({ detta: !!e.target.closest("#annotaMic") });   // sul microfono: parte già in ascolto
+  dipingiPosta(); dipingiAttesa();
   $("avvisiBtn").onclick = () => mostraAvvisi(true);
   dipingiAvvisi();
   if ($("nuovoWs")) $("nuovoWs").onclick = nuovoWorkspace;
@@ -609,71 +615,182 @@ function nuovoWorkspace() {
     } catch (e) { b.disabled = false; b.innerHTML = svg("plus") + "Crea workspace"; toast(e.message, true); }
   };
 }
+// ================================================================ la busta: annotare senza sbloccare
+// Per annotare non serve il PIN. L'appunto viene chiuso con una chiave pubblica (RSA-OAEP + AES-GCM) che sta in chiaro sul
+// telefono; la chiave privata, l'unica che lo riapre, sta nella cassaforte sotto il PIN. Chi prende il telefono vede solo
+// byte a caso. Al primo sblocco gli appunti in attesa partono verso il Mac. La stessa coda regge anche i salvataggi a
+// telefono sbloccato: «Salva» chiude subito, e se il Mac non risponde l'appunto aspetta qui invece di perdersi.
+const Busta = {
+  PUB: "mmt.busta.pub",
+  pronta() { return !!localStorage.getItem(this.PUB) && "caches" in window && !!crypto.subtle; },
+  async prepara(pin, segreto) {                       // a ogni sblocco: se manca la coppia di chiavi la crea e richiude la cassaforte
+    if (segreto.busta && localStorage.getItem(this.PUB)) return;
+    const k = await crypto.subtle.generateKey({ name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["encrypt", "decrypt"]);
+    segreto.busta = await crypto.subtle.exportKey("jwk", k.privateKey);
+    localStorage.setItem(this.PUB, JSON.stringify(await crypto.subtle.exportKey("jwk", k.publicKey)));
+    await Cassa.chiudi(pin, segreto);
+  },
+  async chiudi(obj) {
+    const pub = await crypto.subtle.importKey("jwk", JSON.parse(localStorage.getItem(this.PUB)), { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
+    const k = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]), iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, k, enc.encode(JSON.stringify(obj))));
+    const kk = new Uint8Array(await crypto.subtle.encrypt({ name: "RSA-OAEP" }, pub, await crypto.subtle.exportKey("raw", k)));
+    const id = Date.now() + "-" + rid();
+    await (await caches.open("mmt-busta")).put(id, new Response(new Blob([new Uint8Array([kk.length >> 8, kk.length & 255]), kk, iv, ct])));
+    return id;
+  },
+  async quante() { try { return (await (await caches.open("mmt-busta")).keys()).length; } catch { return 0; } },
+  async apri(segreto) {                               // → [{ id, obj }] in ordine di arrivo
+    if (!segreto?.busta) return [];
+    const priv = await crypto.subtle.importKey("jwk", segreto.busta, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["decrypt"]);
+    const c = await caches.open("mmt-busta"), out = [];
+    for (const req of await c.keys()) {
+      const id = decodeURIComponent(new URL(req.url).pathname.split("/").pop());
+      try {
+        const u = new Uint8Array(await (await c.match(req)).arrayBuffer()), n = u[0] << 8 | u[1];
+        const raw = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, priv, u.subarray(2, 2 + n));
+        const k = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["decrypt"]);
+        out.push({ id, req, obj: JSON.parse(dec.decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: u.subarray(2 + n, 14 + n) }, k, u.subarray(14 + n)))) });
+      } catch { /* chiusa con una chiave vecchia (abbinamento rifatto): non si riapre più */ await c.delete(req); }
+    }
+    return out.sort((a, b) => a.id.localeCompare(b.id));
+  },
+  async togli(req) { await (await caches.open("mmt-busta")).delete(req); },
+  async svuota() { localStorage.removeItem(this.PUB); try { await caches.delete("mmt-busta"); } catch {} },
+};
+// Mette un appunto in coda (chiuso) e, se il telefono è sbloccato, lo fa partire subito in sottofondo
+async function cattura(obj) {
+  obj.t = Date.now();
+  if (Busta.pronta()) {
+    await Busta.chiudi(obj);
+    if (A.sec) { toast(obj.testo ? "Annoto…" : "Mando le foto…"); svuotaCoda(); }
+    else { toast("Messo da parte: lo annoto appena sblocchi"); dipingiAttesa(); }
+    return;
+  }
+  if (!A.sec) throw new Error("Sblocca una volta col PIN: da allora potrai annotare senza");
+  toast("Annoto…"); await mandaAppunto(obj);          // primo uso, la busta non c'è ancora: mando direttamente
+  caricaPosta();
+}
+let codaInCorso = false, codaTimer = 0;
+async function svuotaCoda() {
+  if (codaInCorso || !A.sec || !A.macOk) return;
+  codaInCorso = true; clearTimeout(codaTimer);
+  try {
+    const voci = await Busta.apri(A.sec);
+    let posta = null, rimaste = 0;
+    for (const v of voci) {
+      try {
+        if (v.obj.attesa) {                           // foto di un appunto che aspettava di sapere il workspace
+          posta = posta || await api("GET", "annota");
+          const p = posta.find((x) => x.id === v.obj.attesa);
+          if (p?.stato === "annotato") await mandaFoto(p.ws, v.obj.foto);
+          else if (p && p.stato === "da_smistare") { rimaste++; continue; }
+        } else await mandaAppunto(v.obj);
+        await Busta.togli(v.req);
+      } catch (e) { rimaste++; if (!/vuoto/.test(e.message)) break; }   // il Mac non risponde: riprovo dopo, in ordine
+    }
+    if (voci.length) { caricaPosta(); carica(true); }
+    if (rimaste) codaTimer = setTimeout(svuotaCoda, 25e3);
+  } finally { codaInCorso = false; dipingiAttesa(); }
+}
+const mandaFoto = async (ws, foto) => {
+  for (const b of foto || []) await api("POST", `workspace/${ws}/carica?nome=${encodeURIComponent("Foto " + new Date().toLocaleString("it-IT").replace(/[/:]/g, "-") + ".jpg")}`, null, { corpo: unb64(b), ct: "image/jpeg", attesa: 180e3 });
+};
+async function mandaAppunto(o) {
+  if (!o.testo) { await mandaFoto(o.ws, o.foto); toast(`Foto aggiunte in «${A.wss.find((w) => w.id === o.ws)?.nome || o.ws}»`); return; }
+  const r = await api("POST", "annota", { testo: o.testo, ws: o.ws || undefined, origine: o.origine || "telefono" }, { attesa: 150e3 });
+  if (r.stato === "da_smistare") {
+    if (o.foto?.length && Busta.pronta()) await Busta.chiudi({ attesa: r.id, foto: o.foto });   // le foto aspettano la scelta
+    toast("Un appunto aspetta che tu scelga dove metterlo", true); navigator.vibrate?.([20, 50, 20]);
+    return;
+  }
+  await mandaFoto(r.ws, o.foto);
+  toast(`Annotato in «${r.nome}»${o.foto?.length ? ` · ${o.foto.length} foto tra le fonti` : ""}`); navigator.vibrate?.([10, 60, 10]);
+}
+async function dipingiAttesa() {
+  const n = await Busta.quante();
+  for (const el of document.querySelectorAll(".in-attesa")) { el.textContent = n ? `${n} ${n === 1 ? "appunto" : "appunti"} in attesa${A.sec ? ": li mando appena il Mac risponde" : " dello sblocco"}` : ""; }
+}
+
 // ================================================================ secondo cervello: annota al volo, condividi, avvisi
 // ---------------------------------------------------------------- annota al volo
 // Scrivi (o detti, o fotografi) senza scegliere dove: il Mac decide il workspace e il custode della nota lo sistema.
 // Se non è sicuro te lo chiede. Le foto vanno tra le fonti del workspace scelto.
 function annotaSheet(pre = {}) {
-  const st = { ws: pre.ws || "", foto: pre.foto || [], id: null, ascolto: null };
+  const chiuso = !A.sec;                               // dalla schermata di blocco: niente elenco dei workspace
+  const st = { ws: pre.ws || "", foto: pre.foto || [], ascolto: null };
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const s = sheet(`<div class="an">
-    <h3 class="sh">${svg("edit")}Annota al volo</h3>
-    <textarea id="anTesto" rows="4" placeholder="Es. oggi ho montato il Gewiss C63, non scatta più">${esc(pre.testo || "")}</textarea>
+    <h3 class="sh">${svg("edit")}Annota al volo${chiuso ? `<small>senza sbloccare</small>` : ""}</h3>
+    <textarea id="anTesto" rows="4" placeholder="Scrivi e basta: lo metto io al posto giusto">${esc(pre.testo || "")}</textarea>
     <div class="an-foto" id="anFoto"></div>
     <div class="an-btns">${SR ? `<button class="btn" id="anMic">${svg("mic")}Detta</button>` : ""}<button class="btn" id="anCam">${svg("camera")}Scatta</button><button class="btn" id="anGal">${svg("image")}Galleria</button></div>
-    <div class="lab">Dove</div>
-    <div class="chipsrow" id="anWs"></div>
+    ${chiuso ? "" : `<div class="chipsrow" id="anWs"></div>`}
     <p class="an-msg" id="anMsg"></p>
     <button class="btn main" id="anSalva">${svg("ok")}Salva</button>
+    ${chiuso ? `<p class="an-nota">${svg("key")}Resta chiuso sul telefono: si legge solo col tuo PIN, e parte verso il Mac al prossimo sblocco.</p>` : ""}
     <input type="file" id="anCamIn" accept="image/*" capture="environment" hidden><input type="file" id="anGalIn" accept="image/*" multiple hidden></div>`, "tall");
   const q = (x) => s.querySelector(x), testo = q("#anTesto");
-  const chips = (evidenzia) => {
-    q("#anWs").innerHTML = `<button data-w="" class="${st.ws ? "" : "on"}">${svg("spark")}Decidi tu</button>` + A.wss.map((w) => `<button data-w="${esc(w.id)}" class="${st.ws === w.id ? "on" : ""}${evidenzia === w.id ? " prop" : ""}">${esc(w.nome)}</button>`).join("");
-    q("#anWs").querySelectorAll("[data-w]").forEach((b) => b.onclick = () => { st.ws = b.dataset.w; chips(evidenzia); });
+  const chips = () => {
+    if (chiuso) return;
+    q("#anWs").innerHTML = `<button data-w="" class="${st.ws ? "" : "on"}">${svg("spark")}Decidi tu</button>` + A.wss.map((w) => `<button data-w="${esc(w.id)}" class="${st.ws === w.id ? "on" : ""}">${esc(w.nome)}</button>`).join("");
+    q("#anWs").querySelectorAll("[data-w]").forEach((b) => b.onclick = () => { st.ws = b.dataset.w; chips(); });
   };
   const foto = () => {
     q("#anFoto").innerHTML = st.foto.map((f, k) => `<span class="ph"><img src="${f.url}" alt=""><button data-x="${k}">${svg("x")}</button></span>`).join("");
     q("#anFoto").querySelectorAll("[data-x]").forEach((b) => b.onclick = () => { st.foto.splice(+b.dataset.x, 1); foto(); });
   };
   chips(); foto();
-  setTimeout(() => { if (!pre.testo) testo.focus(); }, 280);
   q("#anCam").onclick = () => q("#anCamIn").click();
   q("#anGal").onclick = () => q("#anGalIn").click();
   for (const id of ["#anCamIn", "#anGalIn"]) q(id).onchange = async () => { for (const f of q(id).files) st.foto.push(await toJpeg(f, 2400)); foto(); };
-  if (SR) q("#anMic").onclick = () => {
+  const detta = () => {
     if (st.ascolto) { st.ascolto.stop(); return; }
     const r = new SR(), base = testo.value ? testo.value.replace(/\s*$/, " ") : "";
     r.lang = "it-IT"; r.interimResults = true; r.continuous = true;
     r.onresult = (e) => { testo.value = base + [...e.results].map((x) => x[0].transcript).join(""); };
-    r.onend = () => { st.ascolto = null; q("#anMic")?.classList.remove("on"); if (q("#anMic")) q("#anMic").innerHTML = svg("mic") + "Detta"; };
+    r.onend = () => { st.ascolto = null; if (q("#anMic")) { q("#anMic").classList.remove("on"); q("#anMic").innerHTML = svg("mic") + "Detta"; } };
     r.onerror = (e) => { if (e.error !== "aborted" && e.error !== "no-speech") toast("Dettatura non riuscita: " + e.error, true); };
     try { r.start(); st.ascolto = r; q("#anMic").classList.add("on"); q("#anMic").innerHTML = svg("mic") + "Ti ascolto… tocca per finire"; } catch { toast("Il microfono non parte", true); }
   };
+  if (SR) q("#anMic").onclick = detta;
+  if (pre.detta && SR) setTimeout(detta, 300); else setTimeout(() => { if (!pre.testo) testo.focus(); }, 280);
   q("#anSalva").onclick = async () => {
     st.ascolto?.stop();
-    const t = testo.value.trim(), b = q("#anSalva");
+    const t = testo.value.trim();
     if (!t && !st.foto.length) { toast("Scrivi qualcosa o aggiungi una foto", true); return; }
-    if (!t && !st.ws) { q("#anMsg").textContent = "Una foto senza testo non so dove metterla: scegli il workspace."; return; }
-    b.disabled = true; b.innerHTML = `<span class="spin"></span>${t ? "Lo metto al posto giusto…" : "Mando le foto…"}`;
-    try {
-      let ws = st.ws, nome = A.wss.find((w) => w.id === ws)?.nome, righe = 0;
-      if (t) {
-        const r = await api("POST", "annota", { testo: t, ws: st.ws || undefined, id: st.id || undefined }, { attesa: 150e3 });
-        if (r.stato === "da_smistare") {
-          st.id = r.id; b.disabled = false; b.innerHTML = svg("ok") + "Salva";
-          q("#anMsg").textContent = r.proposto ? "Non sono sicuro di dove va: ti propongo quello evidenziato, scegli tu." : "Non capisco a quale workspace appartiene: scegli tu.";
-          if (r.proposto) st.ws = r.proposto;
-          chips(r.proposto); return;
-        }
-        ws = r.ws; nome = r.nome; righe = (r.modifiche || []).length;
-      }
-      for (const f of st.foto) await api("POST", `workspace/${ws}/carica?nome=${encodeURIComponent("Foto " + new Date().toLocaleString("it-IT").replace(/[/:]/g, "-") + ".jpg")}`, null, { corpo: new Uint8Array(await f.blob.arrayBuffer()), ct: "image/jpeg", attesa: 180e3 });
-      closeSheet();
-      toast(`${t ? "Annotato" : "Foto aggiunte"} in «${nome}»${st.foto.length && t ? ` · ${st.foto.length} foto tra le fonti` : ""}`);
-      navigator.vibrate?.([10, 60, 10]);
-      carica();
-    } catch (e) { b.disabled = false; b.innerHTML = svg("ok") + "Salva"; toast(e.message, true); }
+    if (!t && !st.ws) { q("#anMsg").textContent = chiuso ? "Scrivi due parole sulla foto, così so dove metterla." : "Una foto senza testo non so dove metterla: scrivi due parole o scegli il workspace."; return; }
+    closeSheet();                                      // subito: il resto succede in sottofondo
+    try { await cattura({ testo: t, ws: st.ws || "", foto: st.foto.map((f) => f.b64) }); }
+    catch (e) { toast(e.message, true); annotaSheet({ testo: t, ws: st.ws, foto: st.foto }); }
   };
+}
+// ---------------------------------------------------------------- ultimi appunti: dove sono finiti, sposta, annulla
+async function caricaPosta() {
+  try { A.posta = await api("GET", "annota"); } catch { return; }
+  dipingiPosta();
+}
+function dipingiPosta() {
+  const el = $("posta"); if (!el) return;
+  const p = (A.posta || []).filter((v) => v.stato !== "annullato");
+  const daSmistare = p.filter((v) => v.stato === "da_smistare"), fatti = p.filter((v) => v.stato === "annotato").slice(0, 3);
+  const riga = (v) => `<button class="pa${v.stato === "da_smistare" ? " dubbio" : ""}" data-p="${v.id}"><span class="in"><b>${esc(v.testo)}</b><small>${v.stato === "da_smistare" ? "Scegli dove metterlo" : `in «${esc(v.nome)}» · ${ago(v.t)}`}</small></span>${svg(v.stato === "da_smistare" ? "right" : "ok")}</button>`;
+  el.innerHTML = daSmistare.length || fatti.length ? `<div class="lab">Ultimi appunti</div>${daSmistare.map(riga).join("")}${fatti.map(riga).join("")}` : "";
+  el.querySelectorAll("[data-p]").forEach((b) => b.onclick = () => appuntoSheet(A.posta.find((v) => v.id === b.dataset.p)));
+}
+function appuntoSheet(v) {
+  const s = sheet(`<div class="an"><h3 class="sh">${svg("edit")}Appunto</h3>
+    <p class="pa-testo">${esc(v.testo)}</p>
+    <div class="lab">${v.stato === "da_smistare" ? "Dove lo metto?" : `Ora è in «${esc(v.nome)}». Spostalo in…`}</div>
+    <div class="chipsrow wrap">${A.wss.map((w) => `<button data-w="${esc(w.id)}" class="${v.ws === w.id ? "on" : ""}${v.proposto === w.id ? " prop" : ""}">${esc(w.nome)}</button>`).join("")}</div>
+    <button class="btn danger-t" id="paVia">${svg("trash")}${v.stato === "da_smistare" ? "Buttalo" : "Annulla l'appunto (lo tolgo dalla nota)"}</button></div>`);
+  const fai = async (cosa, msg) => { closeSheet(); toast(msg); try { await cosa(); } catch (e) { toast(e.message, true); } caricaPosta(); svuotaCoda(); carica(true); };
+  s.querySelectorAll("[data-w]").forEach((b) => b.onclick = () => {
+    if (b.dataset.w === v.ws) return closeSheet();
+    const nome = A.wss.find((w) => w.id === b.dataset.w)?.nome;
+    fai(async () => { await api("POST", "annota", { testo: v.testo, ws: b.dataset.w, id: v.id }, { attesa: 150e3 }); toast(`${v.stato === "da_smistare" ? "Annotato" : "Spostato"} in «${nome}»`); }, v.stato === "da_smistare" ? "Annoto…" : "Lo sposto…");
+  });
+  s.querySelector("#paVia").onclick = () => fai(async () => { await api("POST", `annota/${v.id}/annulla`, {}); toast("Appunto tolto"); }, "Lo tolgo…");
 }
 // «Condividi → MyMind» da un'altra app: il service worker ha messo da parte testo e foto, qui li riprendo e li cancello
 async function condivisoInArrivo() {
@@ -723,27 +840,53 @@ async function caricaAvvisi(riprova = true) {
     mostraAvvisi(false);
   }
 }
+// Una riga che si trascina: a destra conferma, a sinistra annulla; un tocco senza trascinare apre
+function scorrevole(el, carta, { destra, sinistra, tocco }) {
+  let x0 = null, y0 = 0, dx = 0, attivo = false;
+  const soglia = () => Math.min(120, el.offsetWidth * 0.3);
+  carta.addEventListener("pointerdown", (e) => { x0 = e.clientX; y0 = e.clientY; dx = 0; attivo = false; carta.style.transition = "none"; });
+  carta.addEventListener("pointermove", (e) => {
+    if (x0 === null) return;
+    const ddx = e.clientX - x0, ddy = e.clientY - y0;
+    if (!attivo) {
+      if (Math.abs(ddx) > 12 && Math.abs(ddx) > Math.abs(ddy) * 1.3) { attivo = true; try { carta.setPointerCapture(e.pointerId); } catch {} }
+      else { if (Math.abs(ddy) > 12) x0 = null; return; }
+    }
+    dx = ddx; carta.style.transform = `translateX(${dx}px)`;
+    el.classList.toggle("verso-si", dx > 0); el.classList.toggle("verso-no", dx < 0); el.classList.toggle("oltre", Math.abs(dx) > soglia());
+  });
+  const fine = (e) => {
+    if (x0 === null) return;
+    x0 = null; carta.style.transition = "";
+    if (!attivo) { if (e.type === "pointerup") tocco?.(); return; }
+    if (Math.abs(dx) > soglia()) {
+      const si = dx > 0; carta.style.transform = `translateX(${si ? "110%" : "-110%"})`; navigator.vibrate?.(10);
+      setTimeout(() => { el.style.height = el.offsetHeight + "px"; requestAnimationFrame(() => { el.classList.add("via"); el.style.height = "0px"; }); setTimeout(() => { el.remove(); (si ? destra : sinistra)(); }, 220); }, 160);
+    } else { carta.style.transform = ""; el.classList.remove("verso-si", "verso-no", "oltre"); }
+  };
+  carta.addEventListener("pointerup", fine); carta.addEventListener("pointercancel", fine);
+}
 function mostraAvvisi(tutti) {
   const s0 = avvisiScelti();
   const quando = (d) => new Date(d + "T12:00").toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" });
-  const riga = (v) => `<div class="av" data-id="${v.id}"><button class="av-t" data-ws="${esc(v.ws)}"><i style="--c:${esc(v.colore || "#999")}"></i><span><b>${esc(v.testo)}</b><small>${esc(v.nome)}${v.data ? " · " + quando(v.data) : ""}</small></span></button><button class="av-b ok" data-fatto title="Fatto">${svg("ok")}</button><button class="av-b" data-via title="Nascondi">${svg("x")}</button></div>`;
+  const riga = (v) => `<div class="av" data-id="${v.id}"><div class="av-sotto"><span class="si">${svg("ok")}Fatto</span><span class="no">Non mi serve${svg("x")}</span></div>
+    <div class="av-t"><i style="--c:${esc(v.colore || "#999")}"></i><span><b>${esc(v.testo)}</b><small>${esc(v.nome)}${v.data ? " · " + quando(v.data) : ""}</small></span></div></div>`;
   const gruppo = (tit, voci, cls = "") => voci.length ? `<div class="lab ${cls}">${tit}</div>${voci.map(riga).join("")}` : "";
   const corpo = gruppo("In ritardo", s0.ritardo, "rosso") + gruppo("Oggi", s0.oggi, "oro") + gruppo("Nei prossimi 7 giorni", s0.prossimi)
     + (tutti ? gruppo("Ancora aperte, senza data", s0.aperte) : "");
   const s = sheet(`<div class="avvisi"><h3 class="sh">${svg("bell")}Da ricordare</h3>
-    ${corpo || '<p class="vuoto">Niente in scadenza. Le cose aperte senza data le trovi qui sotto quando ci sono.</p>'}
+    ${corpo ? `<p class="av-come"><span>${svg("left")}non mi serve</span><span>fatto${svg("right")}</span></p>` : ""}
+    ${corpo || '<p class="vuoto">Niente in scadenza.</p>'}
     ${!tutti && s0.aperte.length ? `<button class="btn" id="avTutti">Vedi anche le ${s0.aperte.length} cose aperte senza data</button>` : ""}</div>`, "tall");
   if (s.querySelector("#avTutti")) s.querySelector("#avTutti").onclick = () => mostraAvvisi(true);
   s.querySelectorAll(".av").forEach((el) => {
     const v = A.avvisi.voci.find((x) => x.id === el.dataset.id);
-    const togli = () => { const n = nascosti(); n[v.id] = Date.now(); localStorage.setItem("mmt-avvisi-nascosti", JSON.stringify(n)); el.remove(); dipingiAvvisi(); };
-    el.querySelector("[data-ws]").onclick = () => { closeSheet(); apriWs(v.ws, "nota"); };
-    el.querySelector("[data-via]").onclick = togli;
-    el.querySelector("[data-fatto]").onclick = async (e) => {
-      const b = e.currentTarget; b.disabled = true; b.innerHTML = '<span class="spin"></span>';
-      try { await api("POST", "annota", { testo: "Fatto: " + v.testo, ws: v.ws }, { attesa: 150e3 }); togli(); toast(`Segnato come fatto in «${v.nome}»`); }
-      catch (err) { b.disabled = false; b.innerHTML = svg("ok"); toast(err.message, true); }
-    };
+    const nascondi = () => { const n = nascosti(); n[v.id] = Date.now(); localStorage.setItem("mmt-avvisi-nascosti", JSON.stringify(n)); dipingiAvvisi(); };
+    scorrevole(el, el.querySelector(".av-t"), {
+      tocco: () => { closeSheet(); apriWs(v.ws, "nota"); },
+      sinistra: nascondi,
+      destra: () => { nascondi(); cattura({ testo: "Fatto: " + v.testo, ws: v.ws }).catch((e) => toast(e.message, true)); },
+    });
   });
 }
 function menu() {
@@ -755,7 +898,7 @@ function menu() {
   s.querySelector('[data-m="tema"]').onclick = () => { pref.tema = { auto: "light", light: "dark", dark: "auto" }[pref.tema]; savePref(); applicaTema(); closeSheet(); };
   s.querySelector('[data-m="blocca"]').onclick = () => { closeSheet(); blocca(); };
   s.querySelector('[data-m="pin"]').onclick = () => { closeSheet(); const sec = A.sec; pinPad({ titolo: "Nuovo PIN", sotto: "Sei cifre.", onPin: async (p) => { await Cassa.chiudi(p, sec); toast("PIN cambiato"); casa(); } }); };
-  s.querySelector('[data-m="via"]').onclick = async () => { closeSheet(); if (await ask("Cancello la chiave da questo telefono? Per tornare a usarlo serve un nuovo abbinamento dal Mac.", "Dimentica", true)) { Cassa.cancella(); Tunnel.ferma(); A.sec = null; nessunAbbinamento(); } };
+  s.querySelector('[data-m="via"]').onclick = async () => { closeSheet(); if (await ask("Cancello la chiave da questo telefono? Per tornare a usarlo serve un nuovo abbinamento dal Mac.", "Dimentica", true)) { Cassa.cancella(); Busta.svuota(); Tunnel.ferma(); A.sec = null; nessunAbbinamento(); } };
 }
 
 // ================================================================ un workspace
@@ -1312,7 +1455,10 @@ addEventListener("popstate", (e) => {
 function avvio() {
   const nuovo = leggiAbbinamento();
   if (nuovo) return creaPin(nuovo);
-  if (Cassa.c()) return sblocca();
+  // scorciatoia «Annota» dall'icona dell'app: si apre già sul foglio, senza PIN
+  const vuoleAnnotare = new URLSearchParams(location.search).has("annota");
+  if (vuoleAnnotare) history.replaceState(null, "", location.pathname);
+  if (Cassa.c()) { sblocca(); if (vuoleAnnotare && Busta.pronta()) annotaSheet(); return; }
   nessunAbbinamento();
 }
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});

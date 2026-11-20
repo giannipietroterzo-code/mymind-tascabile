@@ -406,11 +406,37 @@ details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
 .stato { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .avvisi { display: flex; flex-direction: column; gap: 8px; }
 .avvisi .lab { margin: 10px 2px 2px; } .avvisi .lab.rosso { color: var(--bad, #d9534f); } .avvisi .lab.oro { color: #c15f3c; }
-.av { display: flex; align-items: stretch; gap: 6px; }
-.av-t { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 11px 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+.av { position: relative; border-radius: 14px; overflow: hidden; transition: height .2s, opacity .2s, margin .2s; }
+.av.via { opacity: 0; margin: -4px 0; }
+.av-sotto { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-radius: 14px; font-size: 13.5px; font-weight: 600; color: #fff; background: var(--panel-2); }
+.av-sotto span { display: inline-flex; align-items: center; gap: 6px; opacity: 0; transition: opacity .12s, transform .12s; }
+.av-sotto svg.i { width: 17px; height: 17px; }
+.av.verso-si .av-sotto { background: #3f9d5f; } .av.verso-si .av-sotto .si { opacity: .75; }
+.av.verso-no .av-sotto { background: #8a8378; } .av.verso-no .av-sotto .no { opacity: .75; }
+.av.oltre .av-sotto span { opacity: 1; transform: scale(1.08); }
+.av-t { position: relative; display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 12px 13px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line);
+  touch-action: pan-y; user-select: none; -webkit-user-select: none; transition: transform .18s ease-out; cursor: grab; }
+.av-come { display: flex; justify-content: space-between; margin: 0 4px; font-size: 12px; color: var(--faint); }
+.av-come span { display: inline-flex; align-items: center; gap: 4px; } .av-come svg.i { width: 13px; height: 13px; }
 .av-t i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; margin-top: 6px; }
 .av-t b { display: block; font-weight: 500; font-size: 14.5px; line-height: 1.35; } .av-t small { color: var(--muted); font-size: 12.5px; }
 .av-b { width: 44px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); display: grid; place-items: center; color: var(--muted); flex: none; }
 .av-b.ok { color: #3f9d5f; }
 /* quando il Mac è in linea basta il pallino verde: nella testata serve posto per versione e campanella */
 .stato.on span { display: none; } .stato.on { padding: 8px; gap: 0; }
+
+/* ---------- cattura al volo: schermata di blocco, attesa, ultimi appunti ---------- */
+.sh small { font: 500 12px var(--sans); color: var(--muted); margin-left: 8px; padding: 3px 8px; border-radius: 99px; border: 1px solid var(--line); }
+.an-nota { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.4; } .an-nota svg.i { width: 15px; height: 15px; flex: none; margin-top: 1px; }
+.in-attesa { margin: 8px 4px 0; font-size: 12.5px; color: #c15f3c; font-weight: 600; } .in-attesa:empty { display: none; }
+.lock-an { display: flex; align-items: center; gap: 12px; width: min(330px, 88vw); margin: 22px auto 0; padding: 12px 16px; border-radius: 18px; text-align: left;
+  background: color-mix(in srgb, #c15f3c 12%, var(--panel)); border: 1px solid color-mix(in srgb, #c15f3c 35%, var(--line)); }
+.lock-an > svg.i:first-child { color: #c15f3c; } .lock-an span { flex: 1; } .lock-an b { display: block; font-weight: 600; font-size: 15px; }
+.lock-an .in-attesa { margin: 2px 0 0; display: block; font-weight: 500; } .lock-an > svg.i:last-child { color: var(--muted); }
+#posta { display: flex; flex-direction: column; gap: 8px; } #posta:empty { display: none; }
+.pa { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 11px 13px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+.pa .in { flex: 1; min-width: 0; } .pa b { display: block; font-weight: 500; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pa small { color: var(--muted); font-size: 12.5px; } .pa > svg.i { width: 17px; height: 17px; color: #3f9d5f; flex: none; }
+.pa.dubbio { border-color: #c15f3c; background: color-mix(in srgb, #c15f3c 9%, var(--panel)); } .pa.dubbio small { color: #c15f3c; font-weight: 600; } .pa.dubbio > svg.i { color: #c15f3c; }
+.pa-testo { margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--bg); font-size: 15px; line-height: 1.45; white-space: pre-wrap; max-height: 30dvh; overflow-y: auto; }
+.chipsrow.wrap { flex-wrap: wrap; overflow: visible; }
