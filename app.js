@@ -405,7 +405,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.28";
+const VERSIONE = "1.29";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -696,8 +696,28 @@ async function svuotaCoda() {
 const mandaFoto = async (ws, foto) => {
   for (const b of foto || []) await api("POST", `workspace/${ws}/carica?nome=${encodeURIComponent("Foto " + new Date().toLocaleString("it-IT").replace(/[/:]/g, "-") + ".jpg")}`, null, { corpo: unb64(b), ct: "image/jpeg", attesa: 180e3 });
 };
+// una copia piccola (1024 px) della foto, solo per farla guardare al modello che sceglie il workspace
+async function rimpicciolita(b64, lato = 1024) {
+  const img = await createImageBitmap(new Blob([unb64(b64)], { type: "image/jpeg" }));
+  const k = Math.min(1, lato / Math.max(img.width, img.height)), cv = document.createElement("canvas");
+  cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+  cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+  return cv.toDataURL("image/jpeg", 0.8).split(",")[1];
+}
 async function mandaAppunto(o) {
-  if (!o.testo) { await mandaFoto(o.ws, o.foto); toast(`Foto aggiunte in «${A.wss.find((w) => w.id === o.ws)?.nome || o.ws}»`); return; }
+  if (!o.testo && o.ws) { await mandaFoto(o.ws, o.foto); toast(`Foto aggiunte in «${A.wss.find((w) => w.id === o.ws)?.nome || o.ws}»`); return; }
+  if (!o.testo) {                                     // solo uno scatto: un modello lo guarda e dice dove va
+    if (!o.foto?.length) throw new Error("appunto vuoto");
+    const r = await api("POST", "annota/foto", { foto: await rimpicciolita(o.foto[0]) }, { attesa: 150e3 });
+    if (r.stato === "da_smistare") {
+      if (Busta.pronta()) await Busta.chiudi({ attesa: r.id, foto: o.foto });
+      toast(`Una foto (${r.descrizione}) aspetta che tu scelga dove metterla`, true); navigator.vibrate?.([20, 50, 20]);
+      return;
+    }
+    await mandaFoto(r.ws, o.foto);
+    toast(`${o.foto.length > 1 ? o.foto.length + " foto" : "Foto"} in «${r.nome}»: ${r.descrizione}`); navigator.vibrate?.([10, 60, 10]);
+    return;
+  }
   const r = await api("POST", "annota", { testo: o.testo, ws: o.ws || undefined, origine: o.origine || "telefono" }, { attesa: 150e3 });
   if (r.stato === "da_smistare") {
     if (o.foto?.length && Busta.pronta()) await Busta.chiudi({ attesa: r.id, foto: o.foto });   // le foto aspettano la scelta
@@ -722,7 +742,7 @@ function annotaSheet(pre = {}) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const s = sheet(`<div class="an">
     <h3 class="sh">${svg("edit")}Annota al volo${chiuso ? `<small>senza sbloccare</small>` : ""}</h3>
-    <textarea id="anTesto" rows="4" placeholder="Scrivi e basta: lo metto io al posto giusto">${esc(pre.testo || "")}</textarea>
+    <textarea id="anTesto" rows="4" placeholder="Scrivi e basta, o scatta una foto: lo metto io al posto giusto">${esc(pre.testo || "")}</textarea>
     <div class="an-foto" id="anFoto"></div>
     <div class="an-btns">${SR ? `<button class="btn" id="anMic">${svg("mic")}Detta</button>` : ""}<button class="btn" id="anCam">${svg("camera")}Scatta</button><button class="btn" id="anGal">${svg("image")}Galleria</button></div>
     ${chiuso ? "" : `<div class="chipsrow" id="anWs"></div>`}
@@ -759,7 +779,6 @@ function annotaSheet(pre = {}) {
     st.ascolto?.stop();
     const t = testo.value.trim();
     if (!t && !st.foto.length) { toast("Scrivi qualcosa o aggiungi una foto", true); return; }
-    if (!t && !st.ws) { q("#anMsg").textContent = chiuso ? "Scrivi due parole sulla foto, così so dove metterla." : "Una foto senza testo non so dove metterla: scrivi due parole o scegli il workspace."; return; }
     closeSheet();                                      // subito: il resto succede in sottofondo
     try { await cattura({ testo: t, ws: st.ws || "", foto: st.foto.map((f) => f.b64) }); }
     catch (e) { toast(e.message, true); annotaSheet({ testo: t, ws: st.ws, foto: st.foto }); }
@@ -781,9 +800,10 @@ function dipingiPosta() {
 function appuntoSheet(v) {
   const s = sheet(`<div class="an"><h3 class="sh">${svg("edit")}Appunto</h3>
     <p class="pa-testo">${esc(v.testo)}</p>
-    <div class="lab">${v.stato === "da_smistare" ? "Dove lo metto?" : `Ora è in «${esc(v.nome)}». Spostalo in…`}</div>
-    <div class="chipsrow wrap">${A.wss.map((w) => `<button data-w="${esc(w.id)}" class="${v.ws === w.id ? "on" : ""}${v.proposto === w.id ? " prop" : ""}">${esc(w.nome)}</button>`).join("")}</div>
-    <button class="btn danger-t" id="paVia">${svg("trash")}${v.stato === "da_smistare" ? "Buttalo" : "Annulla l'appunto (lo tolgo dalla nota)"}</button></div>`);
+    ${v.tipo === "foto" && v.stato === "annotato" ? `<p class="an-nota">${svg("image")}È tra le fonti di «${esc(v.nome)}»: da lì la puoi aprire, rinominare o togliere.</p>` : `
+    <div class="lab">${v.stato === "da_smistare" ? (v.tipo === "foto" ? "Dove la metto?" : "Dove lo metto?") : `Ora è in «${esc(v.nome)}». Spostalo in…`}</div>
+    <div class="chipsrow wrap">${A.wss.map((w) => `<button data-w="${esc(w.id)}" class="${v.ws === w.id ? "on" : ""}${v.proposto === w.id ? " prop" : ""}">${esc(w.nome)}</button>`).join("")}</div>`}
+    <button class="btn danger-t" id="paVia">${svg("trash")}${v.stato === "da_smistare" ? (v.tipo === "foto" ? "Buttala" : "Buttalo") : v.tipo === "foto" ? "Toglila da questo elenco" : "Annulla l'appunto (lo tolgo dalla nota)"}</button></div>`);
   const fai = async (cosa, msg) => { closeSheet(); toast(msg); try { await cosa(); } catch (e) { toast(e.message, true); } caricaPosta(); svuotaCoda(); carica(true); };
   s.querySelectorAll("[data-w]").forEach((b) => b.onclick = () => {
     if (b.dataset.w === v.ws) return closeSheet();
