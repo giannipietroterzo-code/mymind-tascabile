@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.36";
+const VERSIONE = "1.37";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -728,7 +728,7 @@ async function mandaAppunto(o) {
     toast(`${o.foto.length > 1 ? o.foto.length + " foto" : "Foto"} in «${r.nome}»: ${r.descrizione}`); navigator.vibrate?.([10, 60, 10]);
     return;
   }
-  const r = await api("POST", "annota", { testo: o.testo, ws: o.ws || undefined, origine: o.origine || "telefono" }, { attesa: 150e3 });
+  const r = await api("POST", "annota", { testo: o.testo, ws: o.ws || undefined, origine: o.origine || "telefono", scritto: o.t || Date.now() }, { attesa: 150e3 });
   if (r.stato === "da_smistare") {
     if (o.foto?.length && Busta.pronta()) await Busta.chiudi({ attesa: r.id, foto: o.foto });   // le foto aspettano la scelta
     toast("Un appunto aspetta che tu scelga dove metterlo", true); navigator.vibrate?.([20, 50, 20]);
