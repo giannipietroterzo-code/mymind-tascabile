@@ -1,7 +1,7 @@
 /* MyMind tascabile · toni Atelier (avorio, oro brunito, antracite) e l'accento del workspace in --ws.
    Superfici piatte, bordi netti, titoli e testo nello stesso sans di sistema. Pensato per il pollice: tutto ciò che si tocca è ≥ 44 px. */
 :root {
-  --ws: #c15f3c; --on-ws: #fff;
+  --ws: #c15f3c; --on-ws: #fff; --acc: #c15f3c; --acc-t: #c15f3c; --on-acc: #fff;
   --bg: #f6f1e7; --panel: #fffdf8; --panel-2: #efe7d8; --line: #e3d8c4; --text: #161412; --muted: #6b645a; --faint: #a39b8e;
   --ok: #2f9e5b; --bad: #c8463c; --shadow: 0 10px 40px rgba(60, 40, 10, .14);
   --ws-soft: color-mix(in srgb, var(--ws) 13%, var(--panel)); --ws-line: color-mix(in srgb, var(--ws) 45%, var(--line));
@@ -53,7 +53,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 
 /* ---------- blocco col PIN */
 .lock { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 26px calc(28px + var(--safe-b)); text-align: center;
-  background: radial-gradient(120% 60% at 50% 0%, color-mix(in srgb, #c15f3c 9%, var(--bg)), var(--bg) 70%); }
+  background: radial-gradient(120% 60% at 50% 0%, color-mix(in srgb, var(--acc) 9%, var(--bg)), var(--bg) 70%); }
 .lock-top h1 { font: 400 30px/1.15 var(--sans); margin: 18px 0 8px; letter-spacing: -.02em; }
 .lock-top p { color: var(--muted); margin: 0 auto; max-width: 320px; font-size: 15px; min-height: 45px; }
 .lock-top p.bad { color: var(--bad); }
@@ -72,7 +72,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 .intro .how { list-style: none; padding: 0; margin: 30px 0 0; text-align: left; max-width: 360px; display: grid; gap: 12px; }
 .how li { display: flex; gap: 14px; background: var(--panel); border: 1px solid var(--line); padding: 14px; border-radius: var(--r); font-size: 14.5px; color: var(--muted); }
 .how li b { color: var(--text); }
-.how span { width: 28px; height: 28px; border-radius: 50%; background: #c15f3c; color: #fff; display: grid; place-items: center; font-weight: 700; flex: none; font-size: 14px; }
+.how span { width: 28px; height: 28px; border-radius: 50%; background: var(--acc); color: var(--on-acc); display: grid; place-items: center; font-weight: 700; flex: none; font-size: 14px; }
 
 /* ---------- barra in alto */
 .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
@@ -384,28 +384,28 @@ details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* ---------- secondo cervello: annota al volo, avvisi ---------- */
 .annota { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 10px; padding: 12px 14px; border-radius: 20px; text-align: left;
-  background: color-mix(in srgb, #c15f3c 12%, var(--panel)); border: 1px solid color-mix(in srgb, #c15f3c 35%, var(--line)); }
-.annota .ic { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; background: #c15f3c; color: #fff; flex: none; }
+  background: color-mix(in srgb, var(--acc) 12%, var(--panel)); border: 1px solid color-mix(in srgb, var(--acc) 35%, var(--line)); }
+.annota .ic { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; background: var(--acc); color: var(--on-acc); flex: none; }
 .annota .tx { flex: 1; min-width: 0; } .annota b { display: block; font-size: 16px; font-weight: 600; } .annota small { color: var(--muted); font-size: 12.5px; line-height: 1.3; display: block; }
 .annota .mic { color: var(--muted); flex: none; }
 .an { display: flex; flex-direction: column; gap: 12px; }
 .an textarea { width: 100%; min-height: 110px; padding: 13px 14px; border-radius: 16px; border: 1px solid var(--line); background: var(--bg); font-size: 16px; line-height: 1.45; resize: none; outline: 0; }
-.an textarea:focus { border-color: #c15f3c; }
+.an textarea:focus { border-color: var(--acc); }
 .an-btns { display: flex; gap: 8px; flex-wrap: wrap; } .an-btns .btn { flex: 1; min-width: 0; }
-.an-btns .btn.on { background: #c15f3c; border-color: #c15f3c; color: #fff; flex-basis: 100%; }
+.an-btns .btn.on { background: var(--acc); border-color: var(--acc); color: var(--on-acc); flex-basis: 100%; }
 .an-foto { display: flex; gap: 8px; overflow-x: auto; } .an-foto:empty { display: none; }
 .an-foto .ph { position: relative; flex: none; } .an-foto img { width: 64px; height: 64px; border-radius: 12px; object-fit: cover; display: block; }
 .an-foto .ph button { position: absolute; top: -5px; right: -5px; width: 22px; height: 22px; border-radius: 50%; background: var(--text); color: var(--bg); display: grid; place-items: center; }
 .an-foto .ph button svg.i { width: 12px; height: 12px; }
-.an .chipsrow button.prop { border-color: #c15f3c; box-shadow: 0 0 0 2px color-mix(in srgb, #c15f3c 30%, transparent); }
+.an .chipsrow button.prop { border-color: var(--acc); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acc) 30%, transparent); }
 .an .chipsrow button svg.i { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
-.an-msg { margin: 0; color: #c15f3c; font-size: 13.5px; font-weight: 600; } .an-msg:empty { display: none; }
+.an-msg { margin: 0; color: var(--acc-t); font-size: 13.5px; font-weight: 600; } .an-msg:empty { display: none; }
 .campana { position: relative; }
 .campana i { position: absolute; top: 4px; right: 3px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 99px; background: var(--muted); color: var(--bg); font: 700 10.5px/17px var(--sans); font-style: normal; text-align: center; }
-.campana i.caldo { background: #c15f3c; color: #fff; } .campana i.vuoto { display: none; }
+.campana i.caldo { background: var(--acc); color: var(--on-acc); } .campana i.vuoto { display: none; }
 .stato { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .avvisi { display: flex; flex-direction: column; gap: 8px; }
-.avvisi .lab { margin: 10px 2px 2px; } .avvisi .lab.rosso { color: var(--bad, #d9534f); } .avvisi .lab.oro { color: #c15f3c; }
+.avvisi .lab { margin: 10px 2px 2px; } .avvisi .lab.rosso { color: var(--bad, #d9534f); } .avvisi .lab.oro { color: var(--acc-t); }
 .av { position: relative; border-radius: 14px; overflow: hidden; transition: height .2s, opacity .2s, margin .2s; }
 .av.via { opacity: 0; margin: -4px 0; }
 .av-sotto { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-radius: 14px; font-size: 13.5px; font-weight: 600; color: #fff; background: var(--panel-2); }
@@ -428,16 +428,16 @@ details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
 /* ---------- cattura al volo: schermata di blocco, attesa, ultimi appunti ---------- */
 .sh small { font: 500 12px var(--sans); color: var(--muted); margin-left: 8px; padding: 3px 8px; border-radius: 99px; border: 1px solid var(--line); }
 .an-nota { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.4; } .an-nota svg.i { width: 15px; height: 15px; flex: none; margin-top: 1px; }
-.in-attesa { margin: 8px 4px 0; font-size: 12.5px; color: #c15f3c; font-weight: 600; } .in-attesa:empty { display: none; }
+.in-attesa { margin: 8px 4px 0; font-size: 12.5px; color: var(--acc-t); font-weight: 600; } .in-attesa:empty { display: none; }
 .lock-an { display: flex; align-items: center; gap: 12px; width: min(330px, 88vw); margin: 22px auto 0; padding: 12px 16px; border-radius: 18px; text-align: left;
-  background: color-mix(in srgb, #c15f3c 12%, var(--panel)); border: 1px solid color-mix(in srgb, #c15f3c 35%, var(--line)); }
-.lock-an > svg.i:first-child { color: #c15f3c; } .lock-an span { flex: 1; } .lock-an b { display: block; font-weight: 600; font-size: 15px; }
+  background: color-mix(in srgb, var(--acc) 12%, var(--panel)); border: 1px solid color-mix(in srgb, var(--acc) 35%, var(--line)); }
+.lock-an > svg.i:first-child { color: var(--acc-t); } .lock-an span { flex: 1; } .lock-an b { display: block; font-weight: 600; font-size: 15px; }
 .lock-an .in-attesa { margin: 2px 0 0; display: block; font-weight: 500; } .lock-an > svg.i:last-child { color: var(--muted); }
 #posta { display: flex; flex-direction: column; gap: 8px; } #posta:empty { display: none; }
 .pa { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 11px 13px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
 .pa .in { flex: 1; min-width: 0; } .pa b { display: block; font-weight: 500; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pa small { color: var(--muted); font-size: 12.5px; } .pa > svg.i { width: 17px; height: 17px; color: #3f9d5f; flex: none; }
-.pa.dubbio { border-color: #c15f3c; background: color-mix(in srgb, #c15f3c 9%, var(--panel)); } .pa.dubbio small { color: #c15f3c; font-weight: 600; } .pa.dubbio > svg.i { color: #c15f3c; }
+.pa.dubbio { border-color: var(--acc); background: color-mix(in srgb, var(--acc) 9%, var(--panel)); } .pa.dubbio small { color: var(--acc-t); font-weight: 600; } .pa.dubbio > svg.i { color: var(--acc-t); }
 .pa-testo { margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--bg); font-size: 15px; line-height: 1.45; white-space: pre-wrap; max-height: 30dvh; overflow-y: auto; }
 .chipsrow.wrap { flex-wrap: wrap; overflow: visible; }
 
@@ -445,7 +445,7 @@ details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
 .diario { display: flex; flex-direction: column; gap: 8px; }
 .di-giorni button small { margin-left: 6px; font-size: 11px; opacity: .6; }
 .di-tit { margin: 8px 2px 0; font: 400 20px/1.2 var(--sans); } .di-tit::first-letter { text-transform: uppercase; }
-.di-riass { padding: 10px 14px; border-radius: 16px; background: color-mix(in srgb, #c15f3c 9%, var(--panel)); border: 1px solid color-mix(in srgb, #c15f3c 28%, var(--line)); font-size: 14.5px; }
+.di-riass { padding: 10px 14px; border-radius: 16px; background: color-mix(in srgb, var(--acc) 9%, var(--panel)); border: 1px solid color-mix(in srgb, var(--acc) 28%, var(--line)); font-size: 14.5px; }
 .di-riass ul { margin: 0; padding-left: 18px; } .di-riass li { margin: 5px 0; }
 .di-attesa { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13.5px; margin: 4px 2px; }
 .diario .lab { margin: 12px 2px 2px; }
@@ -464,13 +464,78 @@ details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
 .sa-cerca { display: flex; gap: 8px; align-items: center; } .sa-cerca .field { flex: 1; min-width: 0; margin: 0; } .sa-cerca .ib { flex: none; }
 .sapere .lab { margin: 12px 2px 4px; } .lab.sa-ws { display: flex; align-items: center; gap: 7px; } .lab.sa-ws i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
 .sa-testa { display: flex; align-items: center; gap: 8px; margin-top: 6px; } .sa-testa h4 { flex: 1; margin: 0; font: 400 21px/1.2 var(--sans); min-width: 0; }
-.sa-testo { font-size: 15px; } .sa-testo h2 { font: 700 11.5px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: #c15f3c; margin: 16px 0 4px; }
+.sa-testo { font-size: 15px; } .sa-testo h2 { font: 700 11.5px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--acc-t); margin: 16px 0 4px; }
 .sa-p { display: flex; gap: 9px; align-items: flex-start; width: 100%; text-align: left; padding: 9px 4px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); font-size: 13.5px; line-height: 1.45; transition: background .3s; }
-.sa-p.lampo { background: color-mix(in srgb, #c15f3c 14%, transparent); }
-.sa-p > b { width: 20px; flex: none; text-align: right; color: #c15f3c; font-size: 12.5px; padding-top: 2px; }
+.sa-p.lampo { background: color-mix(in srgb, var(--acc) 14%, transparent); }
+.sa-p > b { width: 20px; flex: none; text-align: right; color: var(--acc-t); font-size: 12.5px; padding-top: 2px; }
 .sa-p > i { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); } .sa-p > i svg.i { width: 14px; height: 14px; }
 .sa-p .tx { flex: 1; min-width: 0; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .sa-p small { display: block; color: var(--faint); font-size: 11.5px; }
 .rimandi { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .rimandi button { display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--c) 10%, var(--panel)); border: 1px solid color-mix(in srgb, var(--c) 40%, var(--line)); color: var(--muted); font-size: 13.5px; line-height: 1.4; }
 .rimandi i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; } .rimandi span { flex: 1; } .rimandi b { display: block; color: var(--text); font-weight: 600; } .rimandi svg.i { width: 16px; height: 16px; flex: none; }
+
+
+/* =================================================================== stile Tech (menu ⋯ → Stile)
+   Grigi caldi e un solo accento giallo ambra. Angoli netti, bordi sottili, etichette e numeri in monospaziato, una griglia
+   di puntini appena visibile. Il colore del workspace resta sulla sua tessera; tutto il resto parla in giallo. */
+:root[data-stile="tech"] {
+  --bg: #e8e6e1; --panel: #f4f3ef; --panel-2: #dad7d0; --line: #c4c0b7; --text: #1a1917; --muted: #5c5952; --faint: #8f8b82;
+  --acc: #f0b90b; --acc-t: #8a6400; --on-acc: #1a1708;
+  --ws: var(--acc); --on-ws: var(--on-acc);
+  --ws-text: var(--acc-t);
+  --seg-on: #f4f3ef; --r: 10px;
+  --shadow: 0 8px 28px rgba(30, 25, 10, .16);
+  --punti: rgba(60, 50, 20, .075);
+}
+:root[data-stile="tech"][data-theme="dark"] {
+  --bg: #151513; --panel: #1f1e1c; --panel-2: #2b2a27; --line: #3b3935; --text: #eeebe4; --muted: #a9a59b; --faint: #706d65;
+  --acc: #f5c518; --acc-t: #f5c518; --on-acc: #17150a;
+  --seg-on: #34322e;
+  --shadow: 0 8px 28px rgba(0, 0, 0, .55);
+  --punti: rgba(245, 197, 24, .07);
+}
+[data-stile="tech"] body { background: radial-gradient(var(--punti) 1px, transparent 1.3px) 0 0 / 18px 18px, var(--bg); }
+
+/* forme: più nette, mai tagliate */
+[data-stile="tech"] :is(.card, .row-ws, .askall, .annota, .li, .pa, .carta, .prop, .banner, .how li, .av, .av-t, .av-sotto, .di-riass, .riass, .lock-an, .pa-testo, .an textarea, .estratto, .field) { border-radius: 10px; }
+[data-stile="tech"] :is(.btn, .tabs, .duo button, .comp .box, .search, .nws-ic button, .rimandi button, .mchip) { border-radius: 9px; }
+[data-stile="tech"] :is(.tabs button, .chipsrow button, .sugg button, .pin, .ver, .stato, .wsrc, .sh small, details.web-altri > summary) { border-radius: 7px; }
+[data-stile="tech"] :is(.tile, .annota .ic, .ib.main, .di-v i, .sa-p > i) { border-radius: 8px; }
+[data-stile="tech"] .comp .ib { border-radius: 8px; } [data-stile="tech"] .comp .box { padding: 5px; }
+[data-stile="tech"] .bubble { border-radius: 10px 10px 2px 10px; }
+[data-stile="tech"] .pad button { border-radius: 12px; }
+[data-stile="tech"] #sheet { border-radius: 16px 16px 0 0; }
+
+/* schede dei workspace: niente bolla colorata, una barra del colore del workspace in alto a sinistra */
+[data-stile="tech"] .card::after { inset: 0 auto auto 0; width: 34px; height: 3px; border-radius: 0 0 3px 0; opacity: 1; }
+[data-stile="tech"] .card.nuovo::after, [data-stile="tech"] .card.sk::after { display: none; }
+[data-stile="tech"] :is(.card, .row-ws, .li, .pa, .askall, .annota, .duo button) { box-shadow: none; }
+
+/* etichette e numeri in monospaziato: è il segno «tech», senza maiuscole strette */
+[data-stile="tech"] .lab { font: 600 11px/1 var(--mono); letter-spacing: .1em; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+[data-stile="tech"] .lab::before { content: ""; width: 5px; height: 11px; background: var(--acc); border-radius: 1px; flex: none; }
+[data-stile="tech"] .lab.rosso::before { background: var(--bad); } [data-stile="tech"] .lab.sa-ws::before { display: none; }
+[data-stile="tech"] :is(.ver, .mfoot span, .peso, .li small, .pa small, .av-t small, .di-v .h, .di-v small, .sa-p small, .who small, .in-attesa, .foot-home, .di-giorni button small) { font-family: var(--mono); font-size: 11.5px; letter-spacing: -.02em; }
+[data-stile="tech"] .ver { border-color: var(--line); color: var(--muted); }
+[data-stile="tech"] .mfoot span { font-size: 10.5px; text-align: right; line-height: 1.4; } [data-stile="tech"] .mfoot { gap: 6px; }
+[data-stile="tech"] .wsv body, [data-stile="tech"] #corpo .thread { background: none; }
+[data-stile="tech"] .brand b { letter-spacing: -.01em; font-weight: 600; }
+
+/* testata e schede: linea sottile, e il selezionato si accende di giallo */
+[data-stile="tech"] :is(.home .top, .testa) { border-bottom: 1px solid var(--line); box-shadow: 0 1px 0 0 color-mix(in srgb, var(--acc) 55%, transparent); background: color-mix(in srgb, var(--panel) 92%, transparent); }
+[data-stile="tech"] .tabs { background: var(--panel-2); border: 1px solid var(--line); padding: 2px; }
+[data-stile="tech"] .tabs button.on { background: var(--seg-on); box-shadow: inset 0 -2px 0 var(--acc); }
+[data-stile="tech"] .chipsrow button.on { background: var(--acc); border-color: var(--acc); color: var(--on-acc); }
+[data-stile="tech"] .stato.on i { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent), 0 0 8px var(--ok); }
+
+/* il pulsante Annota: pannello scuro con bordo giallo, non un blocco pieno */
+[data-stile="tech"] .annota, [data-stile="tech"] .lock-an { background: var(--panel); border: 1px solid color-mix(in srgb, var(--acc) 60%, var(--line)); box-shadow: inset 3px 0 0 var(--acc); }
+[data-stile="tech"] .annota .ic { background: var(--acc); color: var(--on-acc); }
+[data-stile="tech"] .lock-an > svg.i:first-child { color: var(--acc-t); }
+[data-stile="tech"] .askall .ib.main, [data-stile="tech"] .ib.main, [data-stile="tech"] .btn.main { background: var(--acc); border-color: var(--acc); color: var(--on-acc); }
+[data-stile="tech"] .bubble { background: color-mix(in srgb, var(--acc) 16%, var(--panel)); border: 1px solid color-mix(in srgb, var(--acc) 30%, var(--line)); }
+[data-stile="tech"] .md a, [data-stile="tech"] .md li::marker { color: var(--acc-t); }
+[data-stile="tech"] .md code, [data-stile="tech"] .md .etic { border-radius: 4px; }
+[data-stile="tech"] .dots i.on { background: var(--acc); border-color: var(--acc); }
+[data-stile="tech"] .specchio mark { background: color-mix(in srgb, var(--acc) 30%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acc) 30%, transparent), 0 0 0 3px color-mix(in srgb, var(--acc) 55%, transparent); }

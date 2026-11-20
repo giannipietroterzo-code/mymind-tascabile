@@ -183,7 +183,11 @@ function separatore(msgs, i) {
 function applicaTema() {
   const scuro = pref.tema === "dark" || (pref.tema === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.theme = scuro ? "dark" : "light";
+  if (pref.stile === "tech") document.documentElement.dataset.stile = "tech"; else delete document.documentElement.dataset.stile;
+  if (typeof tinta === "function") tinta(ultimaTinta);
 }
+const STILI = { atelier: ["Atelier", "avorio caldo, morbido"], tech: ["Tech", "grigi caldi, giallo ambra, angoli netti"] };
+let ultimaTinta = "#c15f3c";
 applicaTema(); matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applicaTema);
 
 // ================================================================ foglio dal basso (scelte, conferme, anteprime)
@@ -405,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.31";
+const VERSIONE = "1.32";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -451,6 +455,9 @@ const notaAutoOn = (model) => A.srv.nota_auto !== false && !!minfo(model) && !is
 const api = (metodo, percorso, corpo, opts) => Tunnel.json(metodo, percorso, corpo, opts);
 function tinta(colore) {
   const r = document.documentElement.style;
+  ultimaTinta = colore;
+  // nello stile Tech l'accento è sempre il giallo del foglio di stile: il colore del workspace resta sulla sua tessera
+  if (pref.stile === "tech") { r.removeProperty("--ws"); r.removeProperty("--on-ws"); return; }
   r.setProperty("--ws", colore); r.setProperty("--on-ws", onColor(colore));
 }
 
@@ -990,6 +997,7 @@ async function diarioSheet(giorno) {
 function menu() {
   const s = sheet(`<div class="menu">
     <button data-m="diario">${svg("ws_calendario")}<span><b>Diario</b><small>Cosa hai fatto e deciso, giorno per giorno</small></span></button>
+    <button data-m="stile">${svg("spark")}<span><b>Stile</b><small>${STILI[pref.stile || "atelier"][0]} · ${STILI[pref.stile || "atelier"][1]}</small></span></button>
     <button data-m="tema">${svg(document.documentElement.dataset.theme === "dark" ? "sun" : "moon")}<span><b>Tema</b><small>${{ auto: "Come il telefono", light: "Chiaro", dark: "Scuro" }[pref.tema]}</small></span></button>
     <button data-m="blocca">${svg("key")}<span><b>Blocca adesso</b><small>Al prossimo avvio serve il PIN</small></span></button>
     <button data-m="pin">${svg("edit")}<span><b>Cambia PIN</b><small>La chiave resta la stessa</small></span></button>
@@ -997,6 +1005,7 @@ function menu() {
   s.querySelector('[data-m="tema"]').onclick = () => { pref.tema = { auto: "light", light: "dark", dark: "auto" }[pref.tema]; savePref(); applicaTema(); closeSheet(); };
   s.querySelector('[data-m="blocca"]').onclick = () => { closeSheet(); blocca(); };
   s.querySelector('[data-m="diario"]').onclick = () => diarioSheet();
+  s.querySelector('[data-m="stile"]').onclick = () => { pref.stile = pref.stile === "tech" ? "atelier" : "tech"; savePref(); applicaTema(); closeSheet(); toast("Stile " + STILI[pref.stile][0]); };
   s.querySelector('[data-m="pin"]').onclick = () => { closeSheet(); const sec = A.sec; pinPad({ titolo: "Nuovo PIN", sotto: "Sei cifre.", onPin: async (p) => { await Cassa.chiudi(p, sec); toast("PIN cambiato"); casa(); } }); };
   s.querySelector('[data-m="via"]').onclick = async () => { closeSheet(); if (await ask("Cancello la chiave da questo telefono? Per tornare a usarlo serve un nuovo abbinamento dal Mac.", "Dimentica", true)) { Cassa.cancella(); Busta.svuota(); Tunnel.ferma(); A.sec = null; nessunAbbinamento(); } };
 }
