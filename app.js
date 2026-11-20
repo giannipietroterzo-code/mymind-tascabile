@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.37";
+const VERSIONE = "1.38";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -1475,9 +1475,85 @@ async function disegnaNota() {
     };
     return;
   }
-  c.innerHTML = `<div class="nota"><div class="nhead"><span>${svg("note")}aggiornata ${ago(A.nota.aggiornata)}</span><button class="btn sm" id="nEdit">${svg("edit")}Modifica</button></div>
+  c.innerHTML = `<div class="nota"><div class="nhead"><span>${svg("note")}aggiornata ${ago(A.nota.aggiornata)}</span><span class="nhead-b"><button class="btn sm" id="nReg">${svg("layers")}Registri</button><button class="btn sm" id="nEdit">${svg("edit")}Modifica</button></span></div>
     <article class="md carta">${A.nota.testo.trim() ? renderMd(A.nota.testo) : '<p class="vuoto">La nota è vuota. Scrivi in chat cosa ricordare («annota che…») e si riempie da sola.</p>'}</article></div>`;
   $("nEdit").onclick = () => { A.notaEdit = true; disegnaNota(); };
+  $("nReg").onclick = () => registroSheet();
+}
+
+// ---------------------------------------------------------------- registri: le cose che si ripetono, coi conti fatti dal Mac
+// La nota racconta, i registri contano: una serie per ogni cosa che si ripete (un sacco aperto, una pulizia, una lettura).
+// Le righe arrivano da sole da appunti e chat; qui si guardano, si correggono e se ne aggiungono a mano.
+const REG_TIPO = { scorta: "scorta", evento: "si ripete", misura: "misura" };
+const REG_EVENTI = { scorta: ["aperto", "finito", "comprato"], evento: ["fatto"], misura: ["lettura"] };
+const regData = (g) => new Date(g + "T12:00").toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" });
+const regNum = (x, d = 2) => x == null ? "" : Number(x).toLocaleString("it-IT", { maximumFractionDigits: d });
+function regBarre(s) {
+  let dati;
+  if (s.tipo === "scorta") dati = s.voci.filter((v) => v.evento === "aperto").map((v) => ({ n: v.giorni, e: v.data, vivo: v.in_corso, t: v.in_corso ? `in uso da ${v.giorni} g` : `durato ${v.giorni} g` }));
+  else if (s.tipo === "evento") dati = s.voci.filter((v) => v.giorni).map((v) => ({ n: v.giorni, e: v.data, t: `${v.giorni} g dalla volta prima` }));
+  else dati = s.voci.map((v) => ({ n: v.quantita, e: v.data, t: regNum(v.quantita) + (s.unita ? " " + s.unita : "") }));
+  dati = dati.filter((d) => d.n != null).slice(-12);
+  if (dati.length < 2) return "";
+  const max = Math.max(...dati.map((d) => d.n), 1), giorno = (g) => new Date(g + "T12:00").toLocaleDateString("it-IT", { day: "numeric", month: "short" });
+  return `<div class="reg-barre"><em>${s.tipo === "misura" ? esc(s.unita || "valori") : "giorni"}</em>${dati.map((d) => `<span class="${d.vivo ? "vivo" : ""}" title="${esc(regData(d.e) + " · " + d.t)}"><b>${regNum(d.n, 1)}</b><i style="height:${Math.max(8, Math.round(d.n / max * 100))}%"></i><small>${esc(giorno(d.e))}</small></span>`).join("")}</div>`;
+}
+function regRiga(s, v) {
+  const u = s.unita ? " " + s.unita : "";
+  const quanto = [v.quantita != null ? regNum(v.quantita) + u + (v.presunto_q ? "~" : "") : "", v.costo != null ? regNum(v.costo) + " €" + (v.presunto_c ? "~" : "") : ""].filter(Boolean).join(" · ");
+  const esito = v.in_corso ? `in uso da ${v.giorni} g` : v.fino ? `${v.giorni} g${v.fino_presunto ? "~" : ""}${v.al_giorno ? ` · ${regNum(v.al_giorno)}${u}/g` : ""}` : s.tipo === "evento" && v.giorni ? `dopo ${v.giorni} g` : "";
+  return `<button class="reg-r${v.in_corso ? " vivo" : ""}" data-v="${v.id}"><span class="d">${regData(v.data)}</span><span class="reg-ev ${v.evento}">${v.evento}</span><span class="q">${esc(quanto)}</span><span class="x">${esc(esito)}</span>${v.nota ? `<small>${esc(v.nota)}</small>` : ""}</button>`;
+}
+function regForm(s, v) {
+  const oggi = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+  return `<form class="reg-f"><input type="date" name="data" value="${v ? v.data : oggi}" required>
+    <select name="evento"${REG_EVENTI[s.tipo].length < 2 ? " hidden" : ""}>${REG_EVENTI[s.tipo].map((e) => `<option${v?.evento === e ? " selected" : ""}>${e}</option>`).join("")}</select>
+    <input name="quantita" inputmode="decimal" autocomplete="off" placeholder="${s.tipo === "misura" ? "valore" : "quantità"}${s.unita ? " (" + esc(s.unita) + ")" : ""}" value="${v && v.quantita != null && !v.presunto_q ? regNum(v.quantita, 3) : ""}">
+    <input name="costo" inputmode="decimal" autocomplete="off" placeholder="costo (€)" value="${v && v.costo != null && !v.presunto_c ? regNum(v.costo, 2) : ""}"${s.tipo === "misura" ? " hidden" : ""}>
+    <input name="nota" autocomplete="off" placeholder="nota (facoltativa)" value="${esc(v?.nota || "")}">
+    <div class="reg-fb">${v ? `<button type="button" class="via" data-via>${svg("trash")}Togli</button>` : ""}<span></span><button type="button" data-no>Annulla</button><button class="salva">${svg("ok")}Salva</button></div></form>`;
+}
+function regHtml(d) {
+  if (!d.serie.length) return `<div class="reg-vuoto">${svg("layers")}<b>${d.aggiorno ? "Leggo la nota e preparo i registri…" : "Ancora nessun registro"}</b>
+    <p>Qui finiscono da sole le cose che si ripetono: un sacco aperto, un rabbocco, una lettura. Scrivile in un appunto o in chat («stamattina ho aperto un sacco di mangime») e MyMind tiene il conto: quanto dura, quanto consuma, quando finisce.</p></div>`;
+  return (d.aggiorno ? `<p class="reg-attesa"><span class="waiting"><i></i><i></i><i></i></span>Rileggo la nota…</p>` : "") + d.serie.map((s) => `<section class="reg" data-s="${s.id}">
+    <header><h4>${esc(s.nome)}</h4><span class="reg-tipo">${REG_TIPO[s.tipo]}${s.unita ? " · " + esc(s.unita) : ""}</span><button class="reg-piu" data-piu title="Aggiungi una riga a mano">${svg("plus")}</button></header>
+    <div class="reg-riep">${s.riepilogo.map(([k, v]) => `<div class="${/verso/i.test(k) ? "forte" : ""}"><small>${esc(k)}</small><b>${esc(v)}</b></div>`).join("")}</div>
+    ${regBarre(s)}
+    <div class="reg-righe">${[...s.voci].reverse().map((v) => regRiga(s, v)).join("")}</div>
+  </section>`).join("") + `<p class="reg-nota">Tocca una riga per correggerla. Il segno ~ indica un valore abituale o una fine dedotta dall'apertura successiva.</p>`;
+}
+// chiama(metodo, pezzo, corpo) parla col Mac; ridisegna(dati) rifà la vista
+function regLega(root, d, chiama, ridisegna) {
+  root.querySelectorAll(".reg").forEach((sec) => {
+    const s = d.serie.find((x) => x.id === sec.dataset.s);
+    const apri = (v, riga) => {
+      root.querySelector(".reg-f")?.remove(); root.querySelectorAll(".reg-r[hidden]").forEach((r) => r.hidden = false);
+      const t = document.createElement("div"); t.innerHTML = regForm(s, v); const f = t.firstElementChild;
+      if (v) { riga.hidden = true; riga.after(f); } else sec.querySelector(".reg-righe").prepend(f);
+      f.querySelector("[data-no]").onclick = () => ridisegna(d);
+      if (v) f.querySelector("[data-via]").onclick = async () => { try { ridisegna(await chiama("DELETE", "voce/" + v.id)); } catch (e) { toast(e.message, true); } };
+      f.onsubmit = async (e) => {
+        e.preventDefault();
+        try { ridisegna(await chiama("POST", "voce", { ...Object.fromEntries(new FormData(f)), serie: s.id, id: v?.id })); } catch (err) { toast(err.message, true); }
+      };
+      if (!v) f.querySelector("[name=quantita]").focus();
+    };
+    sec.querySelector("[data-piu]").onclick = () => apri(null);
+    sec.querySelectorAll(".reg-r").forEach((r) => r.onclick = () => apri(s.voci.find((v) => v.id === r.dataset.v), r));
+  });
+}
+async function registroSheet() {
+  const wid = A.wid, chiama = (m, pezzo, body) => api(m, `workspace/${wid}/registro` + (pezzo ? "/" + pezzo : ""), body);
+  const s = sheet(`<div class="registri"><h3 class="sh">${svg("layers")}Registri<small>i conti li fa il Mac</small></h3><div id="regCorpo"><div class="sk-lines"><i></i><i></i><i></i><i></i></div></div></div>`, "tall");
+  const dis = (d) => {
+    const c = s.querySelector("#regCorpo"); if (!c) return;
+    c.innerHTML = regHtml(d) + `<button class="btn" id="regRil">${svg("redo")}Rileggi dalla nota</button>`;
+    regLega(c, d, chiama, dis);
+    c.querySelector("#regRil").onclick = async () => { try { dis(await chiama("POST", "rileggi", {})); } catch (e) { toast(e.message, true); } };
+    if (d.aggiorno) setTimeout(async () => { if (s.querySelector("#regCorpo") && !s.querySelector(".reg-f")) { try { dis(await chiama("GET")); } catch {} } }, 4000);
+  };
+  try { dis(await chiama("GET")); } catch (e) { const c = s.querySelector("#regCorpo"); if (c) c.innerHTML = `<p class="vuoto">${esc(e.message)}</p>`; }
 }
 
 // ================================================================ fonti
