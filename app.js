@@ -188,6 +188,7 @@ function applicaTema() {
 }
 const STILI = { atelier: ["Atelier", "avorio caldo, morbido"], tech: ["Tech", "grigi caldi, giallo ambra, angoli netti"] };
 let ultimaTinta = "#c15f3c";
+if (!STILI[pref.stile]) { pref.stile = "atelier"; }      // una preferenza rimasta da uno stile che non c'è più (il Mecha) rompeva il menu
 applicaTema(); matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applicaTema);
 
 // ================================================================ foglio dal basso (scelte, conferme, anteprime)
@@ -409,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.33";
+const VERSIONE = "1.34";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
