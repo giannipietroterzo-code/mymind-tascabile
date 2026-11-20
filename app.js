@@ -405,7 +405,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.29";
+const VERSIONE = "1.30";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -909,14 +909,43 @@ function mostraAvvisi(tutti) {
     });
   });
 }
+// ---------------------------------------------------------------- diario: cosa è successo, giorno per giorno
+const DIARIO_IC = { domanda: "chat", appunto: "edit", fonte: "files", nota: "note", scadenza: "bell" };
+async function diarioSheet(giorno) {
+  const s = sheet(`<div class="diario"><h3 class="sh">${svg("ws_calendario")}Diario</h3><p class="vuoto"><span class="spin"></span></p></div>`, "tall");
+  let d;
+  try {
+    d = await api("GET", "diario" + (giorno ? `?giorno=${giorno}` : ""));
+    if (!giorno && d.giorni.length) { giorno = d.giorni[0].giorno; d = await api("GET", `diario?giorno=${giorno}`); }
+  } catch (e) { s.querySelector(".vuoto").textContent = e.message; return; }
+  if (!s.querySelector(".diario")) return;                       // nel frattempo hai chiuso
+  if (!giorno) { s.querySelector(".vuoto").textContent = "Il diario è ancora vuoto: si riempie da solo mentre usi MyMind."; return; }
+  const corto = (g) => g === d.oggi ? "Oggi" : new Date(g + "T12:00").toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" });
+  const lungo = (g) => new Date(g + "T12:00").toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+  const ora = (t) => new Date(t * 1000).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  const scad = d.voci.filter((v) => v.tipo === "scadenza"), resto = d.voci.filter((v) => v.tipo !== "scadenza");
+  const riga = (v, conOra) => `<button class="di-v" data-ws="${esc(v.ws)}">${conOra ? `<span class="h">${ora(v.t)}</span>` : ""}<i style="--c:${esc(v.colore || "#999")}">${svg(DIARIO_IC[v.tipo] || "chat")}</i><span class="tx"><b>${esc(v.testo)}</b><small>${esc(v.nome || "")}${v.tipo === "fonte" ? " · fonte aggiunta" : v.tipo === "appunto" ? " · appunto al volo" : ""}</small></span></button>`;
+  s.querySelector(".diario").innerHTML = `<h3 class="sh">${svg("ws_calendario")}Diario</h3>
+    <div class="chipsrow di-giorni">${d.giorni.map((g) => `<button data-g="${g.giorno}" class="${g.giorno === giorno ? "on" : ""}">${corto(g.giorno)}<small>${g.n}</small></button>`).join("")}</div>
+    <h4 class="di-tit">${lungo(giorno)}</h4>
+    ${d.riassunto ? `<div class="di-riass md">${renderMd(d.riassunto)}</div>` : d.in_corso ? `<p class="di-attesa"><span class="spin"></span>Scrivo il riassunto della giornata…</p>` : ""}
+    ${scad.length ? `<div class="lab">In scadenza quel giorno</div>${scad.map((v) => riga(v, false)).join("")}` : ""}
+    ${resto.length ? `<div class="lab">Passo per passo</div>${resto.map((v) => riga(v, true)).join("")}` : '<p class="vuoto">Quel giorno non c\'è niente con un orario.</p>'}`;
+  s.querySelectorAll("[data-g]").forEach((b) => b.onclick = () => diarioSheet(b.dataset.g));
+  s.querySelectorAll(".di-v").forEach((b) => b.onclick = () => { closeSheet(); apriWs(b.dataset.ws); });
+  s.querySelector(".di-giorni .on")?.scrollIntoView({ inline: "center", block: "nearest" });
+  if (d.in_corso && !d.riassunto) setTimeout(() => { if (s.querySelector(".di-attesa")) diarioSheet(giorno); }, 7000);
+}
 function menu() {
   const s = sheet(`<div class="menu">
+    <button data-m="diario">${svg("ws_calendario")}<span><b>Diario</b><small>Cosa hai fatto e deciso, giorno per giorno</small></span></button>
     <button data-m="tema">${svg(document.documentElement.dataset.theme === "dark" ? "sun" : "moon")}<span><b>Tema</b><small>${{ auto: "Come il telefono", light: "Chiaro", dark: "Scuro" }[pref.tema]}</small></span></button>
     <button data-m="blocca">${svg("key")}<span><b>Blocca adesso</b><small>Al prossimo avvio serve il PIN</small></span></button>
     <button data-m="pin">${svg("edit")}<span><b>Cambia PIN</b><small>La chiave resta la stessa</small></span></button>
     <button data-m="via" class="danger">${svg("trash")}<span><b>Dimentica questo telefono</b><small>Cancella la chiave da qui. Sul Mac revocalo in Impostazioni.</small></span></button></div>`);
   s.querySelector('[data-m="tema"]').onclick = () => { pref.tema = { auto: "light", light: "dark", dark: "auto" }[pref.tema]; savePref(); applicaTema(); closeSheet(); };
   s.querySelector('[data-m="blocca"]').onclick = () => { closeSheet(); blocca(); };
+  s.querySelector('[data-m="diario"]').onclick = () => diarioSheet();
   s.querySelector('[data-m="pin"]').onclick = () => { closeSheet(); const sec = A.sec; pinPad({ titolo: "Nuovo PIN", sotto: "Sei cifre.", onPin: async (p) => { await Cassa.chiudi(p, sec); toast("PIN cambiato"); casa(); } }); };
   s.querySelector('[data-m="via"]').onclick = async () => { closeSheet(); if (await ask("Cancello la chiave da questo telefono? Per tornare a usarlo serve un nuovo abbinamento dal Mac.", "Dimentica", true)) { Cassa.cancella(); Busta.svuota(); Tunnel.ferma(); A.sec = null; nessunAbbinamento(); } };
 }

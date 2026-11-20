@@ -440,3 +440,18 @@ details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
 .pa.dubbio { border-color: #c15f3c; background: color-mix(in srgb, #c15f3c 9%, var(--panel)); } .pa.dubbio small { color: #c15f3c; font-weight: 600; } .pa.dubbio > svg.i { color: #c15f3c; }
 .pa-testo { margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--bg); font-size: 15px; line-height: 1.45; white-space: pre-wrap; max-height: 30dvh; overflow-y: auto; }
 .chipsrow.wrap { flex-wrap: wrap; overflow: visible; }
+
+/* ---------- diario ---------- */
+.diario { display: flex; flex-direction: column; gap: 8px; }
+.di-giorni button small { margin-left: 6px; font-size: 11px; opacity: .6; }
+.di-tit { margin: 8px 2px 0; font: 400 20px/1.2 var(--sans); } .di-tit::first-letter { text-transform: uppercase; }
+.di-riass { padding: 10px 14px; border-radius: 16px; background: color-mix(in srgb, #c15f3c 9%, var(--panel)); border: 1px solid color-mix(in srgb, #c15f3c 28%, var(--line)); font-size: 14.5px; }
+.di-riass ul { margin: 0; padding-left: 18px; } .di-riass li { margin: 5px 0; }
+.di-attesa { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13.5px; margin: 4px 2px; }
+.diario .lab { margin: 12px 2px 2px; }
+.di-v { display: flex; gap: 10px; align-items: flex-start; width: 100%; text-align: left; padding: 9px 4px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.di-v .h { width: 38px; flex: none; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; padding-top: 4px; }
+.di-v i { width: 26px; height: 26px; border-radius: 9px; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); }
+.di-v i svg.i { width: 15px; height: 15px; }
+.di-v .tx { min-width: 0; flex: 1; } .di-v b { font-weight: 500; font-size: 14.5px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.di-v small { color: var(--muted); font-size: 12.5px; }
