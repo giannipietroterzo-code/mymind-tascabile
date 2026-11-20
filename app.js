@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.35";
+const VERSIONE = "1.36";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -746,6 +746,24 @@ async function dipingiAttesa() {
 // ---------------------------------------------------------------- annota al volo
 // Scrivi (o detti, o fotografi) senza scegliere dove: il Mac decide il workspace e il custode della nota lo sistema.
 // Se non è sicuro te lo chiede. Le foto vanno tra le fonti del workspace scelto.
+// Mette insieme i pezzi della dettatura. Chrome su Android, in ascolto continuo, non allunga l'ultimo pezzo: ne aggiunge
+// uno nuovo che ripete tutta la frase fin lì («ho», «ho inserito», «ho inserito lo»…), a volte correggendo una parola.
+// Quindi un pezzo che riparte come il precedente lo sostituisce, invece di accodarsi.
+function dettato(pezzi) {
+  const fuori = [], par = (t) => t.toLowerCase().split(/\s+/);
+  for (const p of pezzi) {
+    const t = (p || "").trim(); if (!t) continue;
+    const u = fuori[fuori.length - 1];
+    if (u) {
+      const a = par(u), b = par(t), corto = Math.min(a.length, b.length);
+      let n = 0; while (n < corto && a[n] === b[n]) n++;                 // parole uguali all'inizio
+      let pari = 0; for (let k = 0; k < corto; k++) if (a[k] === b[k]) pari++;   // parole uguali allo stesso posto
+      if (n === corto || (n >= 1 && corto >= 3 && pari >= corto * .6)) { if (b.length >= a.length || n < corto) fuori[fuori.length - 1] = t; continue; }
+    }
+    fuori.push(t);
+  }
+  return fuori.join(" ");
+}
 function annotaSheet(pre = {}) {
   const chiuso = !A.sec;                               // dalla schermata di blocco: niente elenco dei workspace
   const st = { ws: pre.ws || "", foto: pre.foto || [], ascolto: null };
@@ -778,7 +796,7 @@ function annotaSheet(pre = {}) {
     if (st.ascolto) { st.ascolto.stop(); return; }
     const r = new SR(), base = testo.value ? testo.value.replace(/\s*$/, " ") : "";
     r.lang = "it-IT"; r.interimResults = true; r.continuous = true;
-    r.onresult = (e) => { testo.value = base + [...e.results].map((x) => x[0].transcript).join(""); };
+    r.onresult = (e) => { testo.value = base + dettato([...e.results].map((x) => x[0].transcript)); };
     r.onend = () => { st.ascolto = null; if (q("#anMic")) { q("#anMic").classList.remove("on"); q("#anMic").innerHTML = svg("mic") + "Detta"; } };
     r.onerror = (e) => { if (e.error !== "aborted" && e.error !== "no-speech") toast("Dettatura non riuscita: " + e.error, true); };
     try { r.start(); st.ascolto = r; q("#anMic").classList.add("on"); q("#anMic").innerHTML = svg("mic") + "Ti ascolto… tocca per finire"; } catch { toast("Il microfono non parte", true); }
