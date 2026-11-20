@@ -590,3 +590,9 @@ details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 560px) { .reg-r { grid-template-columns: 78px 70px minmax(0, 1fr); } .reg-r .x { grid-column: 2 / -1; text-align: left; } .reg-riep { grid-template-columns: 1fr 1fr; } }
 .nhead-b { display: flex; gap: 8px; }
 .registri #regRil { width: 100%; justify-content: center; margin: 6px 0 4px; }
+
+.reg-az { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.reg-az button { font: inherit; font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 99px; border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; }
+.reg-az button svg { width: 15px; height: 15px; } .reg-az button:disabled { opacity: .5; }
+.reg-az .forte { background: var(--ws); border-color: var(--ws); color: var(--on-ws); font-weight: 600; }
+[data-stile="tech"] .reg-az button { border-radius: 5px; }

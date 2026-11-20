@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.38";
+const VERSIONE = "1.39";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -933,7 +933,11 @@ function mostraAvvisi(tutti) {
     scorrevole(el, el.querySelector(".av-t"), {
       tocco: () => { closeSheet(); apriWs(v.ws, "nota"); },
       sinistra: nascondi,
-      destra: () => { nascondi(); cattura({ testo: "Fatto: " + v.testo, ws: v.ws }).catch((e) => toast(e.message, true)); },
+      destra: () => {
+        nascondi();
+        if (v.registro) api("POST", `workspace/${v.ws}/registro/voce`, { ...v.registro, data: regOggi() }).then(() => toast(`Segnato nel registro di «${v.nome}»`), (e) => toast(e.message, true));
+        else cattura({ testo: "Fatto: " + v.testo, ws: v.ws }).catch((e) => toast(e.message, true));
+      },
     });
   });
 }
@@ -1513,12 +1517,21 @@ function regForm(s, v) {
     <input name="nota" autocomplete="off" placeholder="nota (facoltativa)" value="${esc(v?.nota || "")}">
     <div class="reg-fb">${v ? `<button type="button" class="via" data-via>${svg("trash")}Togli</button>` : ""}<span></span><button type="button" data-no>Annulla</button><button class="salva">${svg("ok")}Salva</button></div></form>`;
 }
+const regOggi = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+// un tocco per le cose di tutti i giorni: finito, aperto uno nuovo, rifatto. La data è oggi (si corregge toccando la riga)
+function regRapidi(s) {
+  const b = (ev, testo, forte) => `<button data-ora="${ev}" class="${forte ? "forte" : ""}">${svg(ev === "aperto" ? "plus" : "ok")}${testo}</button>`;
+  if (s.tipo === "scorta") return `<div class="reg-az">${s.voci.some((v) => v.in_corso) ? b("finito", "Finito oggi", true) : ""}${b("aperto", "Aperto uno nuovo oggi")}</div>`;
+  if (s.tipo === "evento") return `<div class="reg-az">${b("fatto", "Fatto oggi", true)}</div>`;
+  return "";
+}
 function regHtml(d) {
   if (!d.serie.length) return `<div class="reg-vuoto">${svg("layers")}<b>${d.aggiorno ? "Leggo la nota e preparo i registri…" : "Ancora nessun registro"}</b>
     <p>Qui finiscono da sole le cose che si ripetono: un sacco aperto, un rabbocco, una lettura. Scrivile in un appunto o in chat («stamattina ho aperto un sacco di mangime») e MyMind tiene il conto: quanto dura, quanto consuma, quando finisce.</p></div>`;
   return (d.aggiorno ? `<p class="reg-attesa"><span class="waiting"><i></i><i></i><i></i></span>Rileggo la nota…</p>` : "") + d.serie.map((s) => `<section class="reg" data-s="${s.id}">
     <header><h4>${esc(s.nome)}</h4><span class="reg-tipo">${REG_TIPO[s.tipo]}${s.unita ? " · " + esc(s.unita) : ""}</span><button class="reg-piu" data-piu title="Aggiungi una riga a mano">${svg("plus")}</button></header>
     <div class="reg-riep">${s.riepilogo.map(([k, v]) => `<div class="${/verso/i.test(k) ? "forte" : ""}"><small>${esc(k)}</small><b>${esc(v)}</b></div>`).join("")}</div>
+    ${regRapidi(s)}
     ${regBarre(s)}
     <div class="reg-righe">${[...s.voci].reverse().map((v) => regRiga(s, v)).join("")}</div>
   </section>`).join("") + `<p class="reg-nota">Tocca una riga per correggerla. Il segno ~ indica un valore abituale o una fine dedotta dall'apertura successiva.</p>`;
@@ -1540,6 +1553,10 @@ function regLega(root, d, chiama, ridisegna) {
       if (!v) f.querySelector("[name=quantita]").focus();
     };
     sec.querySelector("[data-piu]").onclick = () => apri(null);
+    sec.querySelectorAll("[data-ora]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { ridisegna(await chiama("POST", "voce", { serie: s.id, evento: b.dataset.ora, data: regOggi() })); toast(`${s.nome}: ${b.dataset.ora} oggi`); } catch (e) { toast(e.message, true); b.disabled = false; }
+    });
     sec.querySelectorAll(".reg-r").forEach((r) => r.onclick = () => apri(s.voci.find((v) => v.id === r.dataset.v), r));
   });
 }
