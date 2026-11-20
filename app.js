@@ -405,7 +405,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.30";
+const VERSIONE = "1.31";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -564,7 +564,8 @@ function casa() {
     <section class="hero">
       <form class="askall" id="askall"><span>${svg("layers")}</span><input id="askq" placeholder="Chiedi a tutti i workspace…" enterkeyhint="send" autocomplete="off"><button class="ib main" aria-label="Chiedi">${svg("up")}</button></form>
       <button class="annota" id="annota"><span class="ic">${svg("edit")}</span><span class="tx"><b>Annota al volo</b><small>Un pensiero, una misura, una foto: lo metto io al posto giusto</small></span><span class="mic" id="annotaMic">${svg("mic")}</span></button>
-      <p class="in-attesa"></p></section>
+      <p class="in-attesa"></p>
+      <div class="duo"><button id="sapereBtn">${svg("search")}Tutto su…</button><button id="diarioBtn">${svg("ws_calendario")}Diario</button></div></section>
     ${err}
     <div id="posta"></div>
     <div class="lab">I tuoi workspace</div>
@@ -578,6 +579,7 @@ function casa() {
   $("menu").onclick = menu;
   $("annota").onclick = (e) => annotaSheet({ detta: !!e.target.closest("#annotaMic") });   // sul microfono: parte già in ascolto
   dipingiPosta(); dipingiAttesa();
+  $("sapereBtn").onclick = () => sapereSheet(); $("diarioBtn").onclick = () => diarioSheet();
   $("avvisiBtn").onclick = () => mostraAvvisi(true);
   dipingiAvvisi();
   if ($("nuovoWs")) $("nuovoWs").onclick = nuovoWorkspace;
@@ -909,6 +911,45 @@ function mostraAvvisi(tutti) {
     });
   });
 }
+// ---------------------------------------------------------------- «Tutto su…»: quello che MyMind sa di una cosa, con le fonti
+const PROVA_IC = { nota: "note", fonte: "files", chat: "chat", appunto: "edit" };
+async function sapereSheet(x) {
+  const s = sheet(`<div class="sapere"><h3 class="sh">${svg("search")}Tutto su…</h3>
+    <form class="sa-cerca" id="saForm"><input class="field" id="saX" placeholder="Una cosa, un fornitore, una decisione…" value="${esc(x || "")}" autocomplete="off" enterkeyhint="search"><button class="ib main" aria-label="Cerca">${svg("search")}</button></form>
+    <div id="saCorpo"><p class="vuoto"><span class="spin"></span>${x ? ` Raccolgo quello che so su «${esc(x)}»…` : ""}</p></div></div>`, "tall");
+  const corpo = () => s.querySelector("#saCorpo"), vivo = () => !!corpo() && (s.querySelector("#saX").dataset.per || "") === (x || "");
+  s.querySelector("#saX").dataset.per = x || "";
+  s.querySelector("#saForm").onsubmit = (e) => { e.preventDefault(); const v = s.querySelector("#saX").value.trim(); if (v) sapereSheet(v); };
+  const chips = () => s.querySelectorAll("[data-sx]").forEach((b) => b.onclick = () => sapereSheet(b.dataset.sx));
+  if (!x) {
+    setTimeout(() => s.querySelector("#saX")?.focus(), 280);
+    const d = await api("GET", "sapere").catch(() => ({ schede: [], suggerite: [] }));
+    if (!vivo()) return;
+    const fissate = d.schede.filter((v) => v.fissata), recenti = d.schede.filter((v) => !v.fissata).slice(0, 6);
+    const perWs = {}; d.suggerite.forEach((c) => (perWs[c.nome] ||= { colore: c.colore, cose: [] }).cose.push(c.x));
+    corpo().innerHTML = `${fissate.length ? `<div class="lab">Schede fissate</div><div class="chipsrow wrap">${fissate.map((v) => `<button data-sx="${esc(v.x)}" class="on">${esc(v.x)}</button>`).join("")}</div>` : ""}
+      ${recenti.length ? `<div class="lab">Cercate di recente</div><div class="chipsrow wrap">${recenti.map((v) => `<button data-sx="${esc(v.x)}">${esc(v.x)}</button>`).join("")}</div>` : ""}
+      ${Object.entries(perWs).map(([nome, g]) => `<div class="lab sa-ws" style="--c:${esc(g.colore || "#999")}"><i></i>${esc(nome)}</div><div class="chipsrow wrap">${g.cose.map((c) => `<button data-sx="${esc(c)}">${esc(c)}</button>`).join("")}</div>`).join("")}
+      ${!d.schede.length && !d.suggerite.length ? '<p class="vuoto">Scrivi una cosa qui sopra: raccolgo quello che ne dicono note, fonti, chat e appunti di tutti i workspace.</p>' : ""}`;
+    return chips();
+  }
+  const mostra = async (rifai) => {
+    let v;
+    try { v = await api("POST", "sapere", { x, rifai }, { attesa: 180e3 }); } catch (e) { if (vivo()) corpo().innerHTML = `<p class="vuoto">${esc(e.message)}</p>`; return; }
+    if (!vivo()) return;
+    if (v.vuota) { corpo().innerHTML = `<p class="vuoto">Su «${esc(x)}» non trovo niente, in nessun workspace.</p>`; return; }
+    const quando = (t) => new Date(t * 1000).toLocaleDateString("it-IT", { day: "numeric", month: "short" });
+    corpo().innerHTML = `<div class="sa-testa"><h4>${esc(v.x)}</h4><button class="btn sm" id="saRifai">${svg("redo")}</button><button class="btn sm${v.fissata ? " main" : ""}" id="saFissa">${svg("ok")}${v.fissata ? "Fissata" : "Fissa"}</button></div>
+      <div class="md sa-testo">${renderMd(v.testo.replace(/\]\[/g, "] ["))}</div>
+      <div class="lab">Da dove viene · ${v.prove.length} fonti</div>
+      ${v.prove.map((p) => `<button class="sa-p" id="saP${p.n}" data-ws="${esc(p.ws)}"><b>${p.n}</b><i style="--c:${esc(p.colore || "#999")}">${svg(PROVA_IC[p.tipo] || "note")}</i><span class="tx"><small>${{ nota: "nota", fonte: "fonte", chat: "chat", appunto: "appunto" }[p.tipo]} · ${esc(p.nome)}${p.titolo ? " · " + esc(p.titolo) : ""}${p.quando ? " · " + quando(p.quando) : ""}</small>${esc(p.testo)}</span></button>`).join("")}`;
+    s.querySelector("#saRifai").onclick = () => { corpo().innerHTML = '<p class="vuoto"><span class="spin"></span> La riscrivo…</p>'; mostra(true); };
+    s.querySelector("#saFissa").onclick = async () => { const r = await api("POST", "sapere/fissa", { x: v.x, fissata: !v.fissata }).catch(() => null); if (r) { v.fissata = r.fissata; const b = s.querySelector("#saFissa"); b.classList.toggle("main", v.fissata); b.innerHTML = svg("ok") + (v.fissata ? "Fissata" : "Fissa"); toast(v.fissata ? "Scheda fissata: la ritrovi in «Tutto su…»" : "Tolta dalle fissate"); } };
+    corpo().querySelectorAll("sup.cite").forEach((c) => c.onclick = () => { const el = s.querySelector("#saP" + c.dataset.n); if (!el) return; el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("lampo"); setTimeout(() => el.classList.remove("lampo"), 1600); });
+    corpo().querySelectorAll(".sa-p").forEach((el) => el.onclick = () => { closeSheet(); apriWs(el.dataset.ws, el.querySelector("small").textContent.startsWith("nota") ? "nota" : el.querySelector("small").textContent.startsWith("fonte") ? "fonti" : "chat"); });
+  };
+  mostra(false);
+}
 // ---------------------------------------------------------------- diario: cosa è successo, giorno per giorno
 const DIARIO_IC = { domanda: "chat", appunto: "edit", fonte: "files", nota: "note", scadenza: "bell" };
 async function diarioSheet(giorno) {
@@ -926,6 +967,8 @@ async function diarioSheet(giorno) {
   const scad = d.voci.filter((v) => v.tipo === "scadenza"), resto = d.voci.filter((v) => v.tipo !== "scadenza");
   const riga = (v, conOra) => `<button class="di-v" data-ws="${esc(v.ws)}">${conOra ? `<span class="h">${ora(v.t)}</span>` : ""}<i style="--c:${esc(v.colore || "#999")}">${svg(DIARIO_IC[v.tipo] || "chat")}</i><span class="tx"><b>${esc(v.testo)}</b><small>${esc(v.nome || "")}${v.tipo === "fonte" ? " · fonte aggiunta" : v.tipo === "appunto" ? " · appunto al volo" : ""}</small></span></button>`;
   s.querySelector(".diario").innerHTML = `<h3 class="sh">${svg("ws_calendario")}Diario</h3>
+    <form class="sa-cerca" id="diForm"><input class="field" id="diQ" placeholder="Cerca nel diario" autocomplete="off" enterkeyhint="search"><button class="ib main" aria-label="Cerca">${svg("search")}</button></form>
+    <div id="diTrovati"></div>
     <div class="chipsrow di-giorni">${d.giorni.map((g) => `<button data-g="${g.giorno}" class="${g.giorno === giorno ? "on" : ""}">${corto(g.giorno)}<small>${g.n}</small></button>`).join("")}</div>
     <h4 class="di-tit">${lungo(giorno)}</h4>
     ${d.riassunto ? `<div class="di-riass md">${renderMd(d.riassunto)}</div>` : d.in_corso ? `<p class="di-attesa"><span class="spin"></span>Scrivo il riassunto della giornata…</p>` : ""}
@@ -933,6 +976,14 @@ async function diarioSheet(giorno) {
     ${resto.length ? `<div class="lab">Passo per passo</div>${resto.map((v) => riga(v, true)).join("")}` : '<p class="vuoto">Quel giorno non c\'è niente con un orario.</p>'}`;
   s.querySelectorAll("[data-g]").forEach((b) => b.onclick = () => diarioSheet(b.dataset.g));
   s.querySelectorAll(".di-v").forEach((b) => b.onclick = () => { closeSheet(); apriWs(b.dataset.ws); });
+  s.querySelector("#diForm").onsubmit = async (e) => {
+    e.preventDefault(); const q = s.querySelector("#diQ").value.trim(), box = s.querySelector("#diTrovati"); if (!q) { box.innerHTML = ""; return; }
+    box.innerHTML = '<p class="vuoto"><span class="spin"></span></p>';
+    const r = await api("GET", "diario?cerca=" + encodeURIComponent(q)).catch(() => null);
+    if (!r || !s.querySelector("#diTrovati")) return;
+    box.innerHTML = r.trovati.length ? `<div class="lab">«${esc(q)}» compare in ${r.trovati.length} ${r.trovati.length === 1 ? "giorno" : "giorni"}</div>` + r.trovati.map((g) => `<button class="pa" data-tg="${g.giorno}"><span class="in"><b>${lungo(g.giorno)}</b><small>${g.voci.length ? esc(g.voci[0].testo.slice(0, 90)) : "nel riassunto della giornata"}</small></span>${svg("right")}</button>`).join("") : `<p class="vuoto">Nessun giorno parla di «${esc(q)}».</p>`;
+    box.querySelectorAll("[data-tg]").forEach((b) => b.onclick = () => diarioSheet(b.dataset.tg));
+  };
   s.querySelector(".di-giorni .on")?.scrollIntoView({ inline: "center", block: "nearest" });
   if (d.in_corso && !d.riassunto) setTimeout(() => { if (s.querySelector(".di-attesa")) diarioSheet(giorno); }, 7000);
 }
@@ -1042,7 +1093,7 @@ function msgHtml(m, i) {
   const tags = [m.fonti?.length || m.nota ? `${m.fonti?.length || 0} fonti${m.nota ? " + nota" : ""}` : "", m.noteWs?.length ? `${m.noteWs.length} note` : "", m.usaWeb ? "web" : ""].filter(Boolean).join(" · ");
   return `<div class="msg b${live ? " live" : ""}" data-i="${i}">
     <div class="who"><span class="av"${pc(m.model)}>${svg("cloud")}</span><b>${esc(shortName(m.model))}</b>${tags ? `<small>${tags}</small>` : ""}</div>
-    <div class="md">${body}</div>${web ? `<div class="wsrcs">${web}</div>` : ""}${notaAutoHtml(m, i)}
+    <div class="md">${body}</div>${web ? `<div class="wsrcs">${web}</div>` : ""}${notaAutoHtml(m, i)}${m.rimandi?.length && !live ? `<div class="rimandi">${m.rimandi.map((r) => `<button data-sapere="${esc(r.x)}" style="--c:${esc(r.colore || "#999")}"><i></i><span><b>C'entra con «${esc(r.nome)}»</b>${esc(r.perche)}</span>${svg("right")}</button>`).join("")}</div>` : ""}
     ${live ? "" : `<div class="mfoot"><button data-copy="${i}">${svg("copy")}</button>${i === A.chat.messages.length - 1 ? `<button data-redo>${svg("redo")}Rigenera</button>` : ""}<span>${st?.eval_count ? `${st.prompt_eval_count ? pesoHtml(st) + " · " : ""}${kTok(st.eval_count)} scritti${costo}` : ""}</span></div>`}</div>`;
 }
 // quanto ha letto il modello per rispondere: tutta la chat, la nota, gli estratti, le fonti citate. Oltre 100k token la chat
@@ -1081,6 +1132,7 @@ function legaThread() {
     const b = e.target.closest("button, sup.cite, img[data-src], .code [data-copy]");
     if (!b) return;
     const m = (sel) => A.chat.messages[+b.dataset[sel]];
+    if (b.dataset.sapere) return sapereSheet(b.dataset.sapere);
     if (b.matches("sup.cite")) return citazione(b.closest(".msg"), +b.dataset.n);
     if (b.matches("img")) return zoom(b.src);
     if (b.dataset.copy !== undefined && b.closest(".code")) { navigator.clipboard?.writeText(b.closest(".code").querySelector("code").innerText); return toast("Copiato"); }
@@ -1288,9 +1340,17 @@ async function genera(chat, freshImages) {
   delete reply.phase;
   A.busy = false; A.ctrl = null; chat.updated = Date.now();
   if (notaAutoOn(model) && wid === A.wid && !reply.error && reply.content.trim() && !reply.content.endsWith("*(interrotta)*")) autoNota(chat, reply, wid);
+  if (!reply.error && reply.content.trim() && !reply.content.endsWith("*(interrotta)*") && wid !== "_tutti") cercaRimandi(chat, reply, wid);
   salvaChat(chat, wid);
   if (A.chat === chat) { disegnaThread(); disegnaComposer(); }
   navigator.vibrate?.(12);
+}
+// Dopo la risposta: questa cosa c'entra con un altro workspace? Se sì compare un rimando sotto, che apre «Tutto su…»
+async function cercaRimandi(chat, reply, wid) {
+  const domanda = chat.messages.slice(0, chat.messages.indexOf(reply)).reverse().find((m) => m.role === "user")?.content || "";
+  const r = await api("POST", "rimandi", { ws: wid, domanda, risposta: reply.content.slice(0, 800) }).catch(() => null);
+  if (!r?.rimandi?.length) return;
+  reply.rimandi = r.rimandi; salvaChat(chat, wid); aggiornaMsg(chat, reply);
 }
 async function autoNota(chat, reply, wid) {
   const prima = chat.messages.slice(0, chat.messages.indexOf(reply)).reverse().find((m) => m.role === "user");
