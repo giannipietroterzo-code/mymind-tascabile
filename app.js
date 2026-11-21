@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.40";
+const VERSIONE = "1.41";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -869,7 +869,7 @@ function avvisiDillo(esiti = {}) {
     .catch(() => voci.forEach((v) => avvisiDetti.delete(v.id)));
 }
 function avvisiScelti() {
-  const a = A.avvisi; if (!a) return { ritardo: [], oggi: [], prossimi: [], aperte: [], n: 0 };
+  const a = A.avvisi; if (!a) return { ritardo: [], oggi: [], prossimi: [], nuove: [], aperte: [], n: 0 };
   const via = nascosti(), g = (d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
   const voci = a.voci.filter((v) => !via[v.id]);
   const conData = voci.filter((v) => v.data).sort((x, y) => x.data.localeCompare(y.data));
@@ -877,9 +877,12 @@ function avvisiScelti() {
     ritardo: conData.filter((v) => v.data < a.oggi && v.data >= g(a.oggi, -10)),
     oggi: conData.filter((v) => v.data === a.oggi),
     prossimi: conData.filter((v) => v.data > a.oggi && v.data <= g(a.oggi, 7)),
-    aperte: voci.filter((v) => !v.data),
   };
-  r.n = r.ritardo.length + r.oggi.length + r.prossimi.length;
+  // senza scadenza: quelle segnate negli ultimi 7 giorni si fanno vedere da sole, le altre restano in fondo.
+  // Una cosa da fare con una data passata da più di 10 giorni non sparisce: torna tra quelle aperte.
+  const libere = voci.filter((v) => !v.data || (v.data < g(a.oggi, -10) && v.tipo !== "scadenza")), fresca = (v) => (v.vista || 0) > Date.now() / 1000 - 7 * 86400;
+  r.nuove = libere.filter(fresca); r.aperte = libere.filter((v) => !fresca(v));
+  r.n = r.ritardo.length + r.oggi.length + r.prossimi.length + r.nuove.length;
   return r;
 }
 function dipingiAvvisi() {
@@ -930,7 +933,7 @@ function mostraAvvisi(tutti) {
   const riga = (v) => `<div class="av" data-id="${v.id}"><div class="av-sotto"><span class="si">${svg("ok")}Fatto</span><span class="no">Non mi serve${svg("x")}</span></div>
     <div class="av-t"><i style="--c:${esc(v.colore || "#999")}"></i><span><b>${esc(v.testo)}</b><small>${esc(v.nome)}${v.data ? " · " + quando(v.data) : ""}</small></span></div></div>`;
   const gruppo = (tit, voci, cls = "") => voci.length ? `<div class="lab ${cls}">${tit}</div>${voci.map(riga).join("")}` : "";
-  const corpo = gruppo("In ritardo", s0.ritardo, "rosso") + gruppo("Oggi", s0.oggi, "oro") + gruppo("Nei prossimi 7 giorni", s0.prossimi)
+  const corpo = gruppo("In ritardo", s0.ritardo, "rosso") + gruppo("Oggi", s0.oggi, "oro") + gruppo("Nei prossimi 7 giorni", s0.prossimi) + gruppo("Da fare, segnate da poco", s0.nuove)
     + (tutti ? gruppo("Ancora aperte, senza data", s0.aperte) : "");
   const s = sheet(`<div class="avvisi"><h3 class="sh">${svg("bell")}Da ricordare</h3>
     ${corpo ? `<p class="av-come"><span>${svg("left")}non mi serve</span><span>fatto${svg("right")}</span></p>` : ""}
