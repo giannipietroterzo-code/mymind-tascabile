@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.41";
+const VERSIONE = "1.42";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -1066,8 +1066,15 @@ function schermoWs() {
     ${isSpecial() ? "" : `<nav class="tabs" id="tabs">${[["chat", "Chat"], ["nota", "Nota"], ["fonti", "Fonti"]].map(([k, l]) => `<button data-t="${k}" class="${A.tab === k ? "on" : ""}">${svg(k === "chat" ? "chat" : k === "nota" ? "note" : "files")}${l}</button>`).join("")}</nav>`}</div>
     <main id="corpo"></main>
     <div id="composer"></div></div>`;
-  $("indietro").onclick = () => history.back();
-  $("app").querySelectorAll("[data-t]").forEach((b) => b.onclick = () => { A.tab = b.dataset.t; A.notaEdit = false; $("tabs").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); disegnaTab(); });
+  // la freccia in alto porta sempre alla home in un tocco: se c'è una chat aperta salta anche il suo passo nella cronologia
+  // (il tasto Indietro di Android invece fa un passo alla volta: dalla chat all'elenco, poi alla home)
+  $("indietro").onclick = () => {
+    if (A.busy && A.chat) return toast("Sta rispondendo: aspetta o premi ■");
+    history.go(history.state?.v === "chat" ? -2 : -1);
+  };
+  $("app").querySelectorAll("[data-t]").forEach((b) => b.onclick = () => {
+    if (b.dataset.t === "chat" && A.tab === "chat" && A.chat && !A.busy && history.state?.v === "chat") return history.back();   // «Chat» toccato dentro una chat: torna all'elenco
+    A.tab = b.dataset.t; A.notaEdit = false; $("tabs").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); disegnaTab(); });
   $("mchip").onclick = sceltaModello;
   disegnaChip();
   disegnaTab();
@@ -1692,7 +1699,13 @@ addEventListener("popstate", (e) => {
   if (!A.sec) return;
   if (A.busy && A.chat) { history.pushState({ v: "chat" }, ""); return toast("Sta rispondendo: aspetta o premi ■"); }
   const v = e.state?.v;
-  if (A.chat && v !== "chat") { A.chat = null; disegnaTab(); return; }
+  if (A.chat && v !== "chat") {
+    A.chat = null;
+    if (v === "ws") {                                       // un passo solo, dalla chat al workspace
+      if (A.tab === "chat") { disegnaTab(); return; }       // sulla scheda Chat: torna all'elenco
+      history.back(); return;                               // su Nota o Fonti la chat non si vede: prosegue fino alla home
+    }
+  }
   if (A.wid && v !== "ws" && v !== "chat") { casa(); carica(); }
 });
 function avvio() {
