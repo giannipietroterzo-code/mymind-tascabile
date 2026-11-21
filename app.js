@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.43";
+const VERSIONE = "1.44";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -1507,7 +1507,7 @@ async function autoNota(chat, reply, wid) {
   const prima = chat.messages.slice(0, chat.messages.indexOf(reply)).reverse().find((m) => m.role === "user");
   reply.notaAuto = { stato: "controllo" }; aggiornaMsg(chat, reply);
   try {
-    const r = await api("POST", `workspace/${wid}/nota/auto`, { domanda: prima?.content || "", risposta: reply.content });
+    const r = await api("POST", `workspace/${wid}/nota/auto`, { domanda: prima?.content || "", risposta: reply.content, chat: chat.id, pos: chat.messages.indexOf(reply) });
     if (r.modifiche.length) { reply.notaAuto = { stato: "fatto", modifiche: r.modifiche }; A.nota = null; navigator.vibrate?.([10, 60, 10]); }
     else delete reply.notaAuto;
   } catch (e) { reply.notaAuto = { stato: "errore", errore: e.message }; }
