@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.42";
+const VERSIONE = "1.43";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -1048,13 +1048,14 @@ function menu() {
 
 // ================================================================ un workspace
 async function apriWs(id, tab = "chat") {
-  A.wid = id; A.tab = isSpecial() && tab !== "chat" ? "chat" : tab; A.chat = null; A.pins = []; A.foto = []; A.nota = null; A.fonti = []; A.notaEdit = false;
+  A.wid = id; A.tab = isSpecial() && tab !== "chat" ? "chat" : tab; A.chat = null; A.pins = []; A.foto = []; A.nota = null; A.fonti = []; A.notaEdit = false; A.cestino = [];
   history.pushState({ v: "ws" }, "");
   tinta(ws().colore);
   schermoWs();
   const wid = id;
-  const [chats] = await Promise.all([api("GET", `workspace/${id}/chats`).catch(() => [])]);
+  const [chats, cest] = await Promise.all([api("GET", `workspace/${id}/chats`).catch(() => []), api("GET", `workspace/${id}/chats/cestino`).catch(() => null)]);
   if (A.wid !== wid) return;
+  A.cestino = cest?.voci || [];
   A.chats = (chats || []).sort((a, b) => (b.updated || 0) - (a.updated || 0));
   if (A.tab === "chat" && !A.chat) disegnaTab();
   if (!isSpecial()) caricaFonti();
@@ -1096,6 +1097,101 @@ function disegnaTab() {
   else { $("composer").innerHTML = ""; A.tab === "nota" ? disegnaNota() : disegnaFonti(); }
 }
 
+
+// ================================================================ chat: rinomina, cancella, cestino
+// Cancellare non butta via: la chat va nel cestino del Mac e ci resta 30 giorni. Prima, un modello guarda se nella chat c'è
+// qualcosa che nella nota non c'è, e te lo fa salvare.
+function chatAzioni(ch) {
+  if (!ch) return;
+  const s = sheet(`<h3 class="sh ch-t">${esc((ch.title || "Chat").split("\n")[0])}</h3>
+    <div class="menu">
+      <button data-m="rin">${svg("edit")}<span><b>Rinomina</b><small>Dalle un nome che ritrovi</small></span></button>
+      <button data-m="via" class="danger">${svg("trash")}<span><b>Cancella</b><small>Va nel cestino: la riprendi entro 30 giorni</small></span></button></div>`);
+  s.querySelector('[data-m="rin"]').onclick = async () => {
+    closeSheet();
+    const nuovo = await chiediTesto("Nome della chat", (ch.title || "").split("\n")[0], "Rinomina");
+    if (!nuovo || nuovo === ch.title) return;
+    ch.title = nuovo.slice(0, 120); salvaChat(ch); if (!A.chat) disegnaChats(); toast("Rinominata");
+  };
+  s.querySelector('[data-m="via"]').onclick = () => cancellaChat(ch);
+}
+let verificaN = 0;
+async function cancellaChat(ch) {
+  const wid = A.wid, mia = ++verificaN;
+  const parla = (ch.messages || []).some((m) => m.role === "user");
+  const via = async (dopo) => {
+    verificaN++;
+    const d = daSalvare.get(ch.id); if (d) { clearTimeout(d.timer); daSalvare.delete(ch.id); }
+    try { await api("DELETE", `workspace/${wid}/chats/${encodeURIComponent(ch.id)}`); } catch (e) { return toast(e.message, true); }
+    if (A.wid !== wid) return;
+    A.chats = A.chats.filter((c) => c.id !== ch.id);
+    if (parla) A.cestino = [{ id: ch.id }, ...(A.cestino || []).filter((c) => c.id !== ch.id)];
+    if ($("sheet").classList.contains("open")) closeSheet();
+    if (!A.chat) disegnaChats();
+    toast(dopo || (parla ? "Chat nel cestino" : "Chat cancellata"));
+  };
+  if (!parla || isSpecial()) return via();
+  const s = sheet(`<h3 class="sh ch-t">${esc((ch.title || "Chat").split("\n")[0])}</h3>
+    <div class="ch-att"><i class="spin"></i><span><b>Guardo se si perde qualcosa</b><small>Confronto la chat con la nota e i registri.</small></span></div>
+    <div class="row2"><button class="btn" data-no>Annulla</button><button class="btn danger-t" data-su>Cancella senza controllare</button></div>`);
+  s.querySelector("[data-no]").onclick = () => { verificaN++; closeSheet(); };
+  s.querySelector("[data-su]").onclick = () => via();
+  let r;
+  try { r = await api("POST", `workspace/${wid}/chats/${encodeURIComponent(ch.id)}/verifica`); } catch (e) { r = { mancanti: [], saltata: e.message }; }
+  if (mia !== verificaN || !$("sheet").classList.contains("open")) return;      // nel frattempo hai annullato o già cancellato
+  const manca = r.mancanti || [];
+  if (!manca.length) return via(r.saltata ? "Chat nel cestino (controllo saltato)" : "Nel cestino · nella nota c'era già tutto");
+  const s2 = sheet(`<h3 class="sh ch-t"><span class="num">${manca.length}</span>${manca.length === 1 ? "cosa che non trovo nella nota" : "cose che non trovo nella nota"}</h3>
+    <p class="ch-sp">Stanno solo in questa chat. Lascia la spunta a quelle da tenere.</p>
+    <div class="ch-manca">${manca.map((m, i) => `<label><input type="checkbox" data-i="${i}" checked><i>${svg("ok")}</i><span>${esc(m)}</span></label>`).join("")}</div>
+    <div class="ch-btn"><button class="btn main" data-salva>${svg("note")}Salva nella nota e cancella</button>
+      <div class="row2"><button class="btn" data-no>Annulla</button><button class="btn danger-t" data-su>Solo cancella</button></div></div>`, "tall");
+  const scelte = () => [...s2.querySelectorAll("input:checked")].map((x) => manca[+x.dataset.i]);
+  const agg = () => { const n = scelte().length; s2.querySelector("[data-salva]").disabled = !n; };
+  s2.querySelectorAll("input").forEach((x) => x.onchange = agg);
+  s2.querySelector("[data-no]").onclick = () => closeSheet();
+  s2.querySelector("[data-su]").onclick = () => via();
+  s2.querySelector("[data-salva]").onclick = async (e) => {
+    const righe = scelte(), b = e.currentTarget;
+    b.disabled = true; b.innerHTML = `<i class="spin"></i>Scrivo nella nota…`;
+    try {
+      await api("POST", `workspace/${wid}/chats/salva-mancanti`, { righe });
+      A.nota = null;
+      via(righe.length === 1 ? "Salvata nella nota · chat nel cestino" : `${righe.length} cose salvate nella nota · chat nel cestino`);
+    } catch (err) { b.disabled = false; b.innerHTML = `${svg("note")}Salva nella nota e cancella`; toast(err.message, true); }
+  };
+}
+async function cestinoSheet() {
+  const wid = A.wid;
+  const s = sheet(`<h3 class="sh">${svg("trash")}Cestino</h3><div id="cestB"><div class="ch-att"><i class="spin"></i><span><b>Apro il cestino…</b></span></div></div>`, "tall");
+  const disegna = (r) => {
+    A.cestino = r.voci || [];
+    const box = s.querySelector("#cestB"); if (!box) return;
+    box.innerHTML = A.cestino.length ? `<p class="ch-sp">Le chat cancellate restano qui ${r.giorni || 30} giorni, poi spariscono da sole.</p>
+      <div class="list">${A.cestino.map((c) => `<div class="cest-v"><span class="in"><b>${esc(c.title || "Chat")}</b><small>${c.messaggi} messaggi · cancellata ${ago(c.cancellata)} · ${c.giorni > 1 ? `ancora ${c.giorni} giorni` : c.giorni === 1 ? "ancora 1 giorno" : "ultimo giorno"}</small></span>
+        <button class="btn" data-su="${esc(c.id)}">${svg("redo")}Riprendi</button><button class="ib danger-t" data-giu="${esc(c.id)}" aria-label="Elimina per sempre">${svg("x")}</button></div>`).join("")}</div>
+      <button class="btn danger-t ch-svuota" id="cestVia">${svg("trash")}Svuota il cestino</button>` : `<p class="ch-vuoto">${svg("trash")}Il cestino è vuoto.</p>`;
+    box.querySelectorAll("[data-su]").forEach((b) => b.onclick = async () => {
+      try { disegna(await api("POST", `workspace/${wid}/chats/cestino/${encodeURIComponent(b.dataset.su)}`)); } catch (e) { return toast(e.message, true); }
+      const chats = await api("GET", `workspace/${wid}/chats`).catch(() => null);
+      if (chats && A.wid === wid) { A.chats = chats.sort((a, c) => (c.updated || 0) - (a.updated || 0)); if (!A.chat && A.tab === "chat") disegnaChats(); }
+      toast("Chat ripresa");
+    });
+    box.querySelectorAll("[data-giu]").forEach((b) => b.onclick = async () => {
+      if (!await ask("La elimino per sempre? Da qui non si torna indietro.", "Elimina", true)) return cestinoSheet();
+      try { await api("DELETE", `workspace/${wid}/chats/cestino/${encodeURIComponent(b.dataset.giu)}`); } catch (e) { toast(e.message, true); }
+      cestinoSheet();
+    });
+    if (box.querySelector("#cestVia")) box.querySelector("#cestVia").onclick = async () => {
+      if (!await ask(`Elimino per sempre ${A.cestino.length === 1 ? "la chat" : "le " + A.cestino.length + " chat"} nel cestino?`, "Svuota", true)) return cestinoSheet();
+      try { await api("DELETE", `workspace/${wid}/chats/cestino`); A.cestino = []; toast("Cestino svuotato"); } catch (e) { toast(e.message, true); }
+      if (!A.chat && A.tab === "chat") disegnaChats();
+    };
+    if (!A.chat && A.tab === "chat" && A.wid === wid) { const y = $("corpo").scrollTop; disegnaChats(); $("corpo").scrollTop = y; }
+  };
+  try { disegna(await api("GET", `workspace/${wid}/chats/cestino`)); } catch (e) { toast(e.message, true); }
+}
+
 // ================================================================ chat: elenco
 function disegnaChats() {
   const sugg = isTutti() ? ["Cosa scade nei prossimi tre mesi?", "Cosa ho annotato questa settimana?", "Quali cose da fare sono rimaste aperte?"]
@@ -1104,7 +1200,10 @@ function disegnaChats() {
   $("corpo").innerHTML = `<div class="chats">
     <div class="welcome">${tile(ws())}<h2>${isSpecial() ? esc(ws().nome) : `Cosa ti serve su «${esc(ws().nome)}»?`}</h2>
       <div class="sugg">${sugg.map((s) => `<button data-s="${esc(s)}">${esc(s)}</button>`).join("")}</div></div>
-    ${A.chats.length ? `<div class="lab">Chat precedenti</div><div class="list">${A.chats.slice(0, 40).map((ch) => `<button class="li" data-c="${esc(ch.id)}"><span class="ic">${svg("chat")}</span><span class="in"><b>${esc((ch.title || "Chat").split("\n")[0])}</b><small>${ch.messages?.length || 0} messaggi · ${ago((ch.updated || ch.created) / 1000)}${ch.telefono ? " · dal telefono" : ""}</small></span></button>`).join("")}</div>` : ""}</div>`;
+    ${A.chats.length ? `<div class="lab">Chat precedenti</div><div class="list">${A.chats.slice(0, 40).map((ch) => `<div class="li-r"><button class="li" data-c="${esc(ch.id)}"><span class="ic">${svg("chat")}</span><span class="in"><b>${esc((ch.title || "Chat").split("\n")[0])}</b><small>${ch.messages?.length || 0} messaggi · ${ago((ch.updated || ch.created) / 1000)}${ch.telefono ? " · dal telefono" : ""}</small></span></button><button class="li-m" data-cm="${esc(ch.id)}" aria-label="Rinomina o cancella">${svg("dots")}</button></div>`).join("")}</div>` : ""}
+    ${A.cestino?.length ? `<button class="cestino" id="cestino">${svg("trash")}<span>Cestino · ${A.cestino.length} ${A.cestino.length === 1 ? "chat" : "chat"}</span><small>si riprendono entro 30 giorni</small>${svg("chev")}</button>` : ""}</div>`;
+  $("corpo").querySelectorAll("[data-cm]").forEach((b) => b.onclick = () => chatAzioni(A.chats.find((c) => c.id === b.dataset.cm)));
+  if ($("cestino")) $("cestino").onclick = cestinoSheet;
   $("corpo").querySelectorAll("[data-c]").forEach((b) => b.onclick = () => { A.chat = A.chats.find((c) => c.id === b.dataset.c); history.pushState({ v: "chat" }, ""); disegnaThread(); disegnaComposer(); scorri(); });
   $("corpo").querySelectorAll("[data-s]").forEach((b) => b.onclick = () => {
     const s = b.dataset.s, inp = $("input");
