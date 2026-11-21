@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.44";
+const VERSIONE = "1.45";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -1599,10 +1599,53 @@ async function disegnaNota() {
     return;
   }
   c.innerHTML = `<div class="nota"><div class="nhead"><span>${svg("note")}aggiornata ${ago(A.nota.aggiornata)}</span><span class="nhead-b"><button class="btn sm" id="nReg">${svg("layers")}Registri</button><button class="btn sm" id="nEdit">${svg("edit")}Modifica</button></span></div>
-    <article class="md carta">${A.nota.testo.trim() ? renderMd(A.nota.testo) : '<p class="vuoto">La nota è vuota. Scrivi in chat cosa ricordare («annota che…») e si riempie da sola.</p>'}</article></div>`;
+    <article class="md carta" id="memCorpo">${A.nota.testo.trim() ? (A.mem?.agg === A.nota.aggiornata ? "" : renderMd(A.nota.testo)) : '<p class="vuoto">La nota è vuota. Scrivi in chat cosa ricordare («annota che…») e si riempie da sola.</p>'}</article></div>`;
   $("nEdit").onclick = () => { A.notaEdit = true; disegnaNota(); };
   $("nReg").onclick = () => registroSheet();
+  if (A.nota.testo.trim()) memDisegna();
 }
+// le tre lenti sulla memoria (il codice che le disegna è più sotto, uguale a quello del Mac)
+async function memDisegna() {
+  const wid = A.wid, agg = A.nota.aggiornata;
+  if (A.mem?.agg !== agg || A.mem.wid !== wid) {
+    const d = await api("GET", `workspace/${wid}/memoria`).catch(() => null);
+    if (!d || A.wid !== wid) return;
+    A.mem = { agg, wid, d };
+  }
+  const dis = () => {
+    const c = $("memCorpo"); if (!c || A.wid !== wid || A.tab !== "nota" || A.notaEdit || !A.mem.d.argomenti.length) return;
+    c.classList.add("mem-carta");
+    c.innerHTML = memHtml(A.mem.d, A.lente || "argomenti");
+    memLega(c, { lente: (l) => { A.lente = l; dis(); $("corpo").scrollTop = 0; }, fatto: memFatto, cosa: memCosa });
+  };
+  dis();
+}
+const memChiama = (wid) => (m, pezzo, body) => api(m, `workspace/${wid}/${pezzo}`, body);
+const memApri = {
+  cosa: (id) => memCosa(id), fatto: (id) => memFatto(id), registro: () => registroSheet(),
+  chiedi: (titolo, valore) => chiediTesto(titolo, valore),
+  chat: (id) => {
+    const c = A.chats.find((x) => x.id === id); if (!c) return toast("Quella chat non c'è più", true);
+    closeSheet(); A.tab = "chat"; A.chat = c; history.pushState({ v: "chat" }, ""); schermoWs();
+  },
+  altrove: async (ws, id) => { closeSheet(); history.back(); setTimeout(async () => { await apriWs(ws, "nota"); memCosa(id); }, 350); },
+};
+async function memRicarica() { A.nota = null; A.mem = null; if (A.tab === "nota") await disegnaNota(); caricaAvvisi?.(); }
+async function memFatto(id) {
+  const wid = A.wid, s = sheet(`<div id="memFoglio"><div class="sk-lines"><i></i><i></i><i></i></div></div>`, "tall");
+  let f; try { f = await api("GET", `workspace/${wid}/fatti/${encodeURIComponent(id)}`); } catch (e) { toast(e.message, true); return closeSheet(); }
+  const box = s.querySelector("#memFoglio"); if (!box) return;
+  box.innerHTML = memFattoHtml(f);
+  memFattoLega(box, f, memChiama(wid), async (nuovo) => { await memRicarica(); nuovo ? memFatto(nuovo) : closeSheet(); }, memApri);
+}
+async function memCosa(id) {
+  const wid = A.wid, s = sheet(`<div id="memFoglio"><div class="sk-lines"><i></i><i></i><i></i></div></div>`, "tall");
+  let c; try { c = await api("GET", `workspace/${wid}/cose/${encodeURIComponent(id)}`); } catch (e) { toast(e.message, true); return closeSheet(); }
+  const box = s.querySelector("#memFoglio"); if (!box) return;
+  box.innerHTML = memCosaHtml(c, new Date().toLocaleDateString("sv"));
+  memCosaLega(box, c, memChiama(wid), async () => { await memRicarica(); memCosa(c.id); }, memApri);
+}
+
 
 // ---------------------------------------------------------------- registri: le cose che si ripetono, coi conti fatti dal Mac
 // La nota racconta, i registri contano: una serie per ogni cosa che si ripete (un sacco aperto, una pulizia, una lettura).
@@ -1679,6 +1722,140 @@ function regLega(root, d, chiama, ridisegna) {
     sec.querySelectorAll(".reg-r").forEach((r) => r.onclick = () => apri(s.voci.find((v) => v.id === r.dataset.v), r));
   });
 }
+// ================================================================ memoria: tre lenti sugli stessi fatti
+// La memoria di un workspace sono fatti collegati (li tiene il Mac). Qui si guardano in tre modi: per argomento (com'è la
+// nota), per cosa (tutto quello che riguarda l'incubatrice, il mangime…), per tempo (cosa è successo e cosa deve succedere).
+// Toccando un fatto si vede da dove viene e cosa c'era prima. Questo pezzo è uguale sul Mac e sul telefono.
+const MEM_TIPI = { dato: ["Dato", "file"], decisione: ["Decisione", "bulb"], evento: ["È successo", "history"], previsto: ["Previsto", "bell"],
+  da_fare: ["Da fare", "ok"], manca: ["Manca un dato", "search"], misura: ["Misura", "layers"], testo: ["Testo", "note"] };
+const MEM_DA = { chat: "chat", appunto: "edit", fonte: "file", mano: "edit", nota: "note", registro: "layers" };
+const MEM_GENERI = { oggetto: "oggetto", scorta: "scorta", luogo: "luogo", persona: "persona", fornitore: "fornitore", attivita: "attività", animale: "animali", documento: "documento" };
+const memInl = (t) => renderMd(t).trim().replace(/^<p>/, "").replace(/<\/p>$/, "");
+const memGiorno = (g, corto) => new Date(g + "T12:00").toLocaleDateString("it-IT", corto ? { day: "numeric", month: "short" }
+  : { weekday: "long", day: "numeric", month: "long", ...(g.slice(0, 4) !== String(new Date().getFullYear()) ? { year: "numeric" } : {}) });
+const memQuando = (t) => t ? new Date(t * 1000).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+const memAperto = (f) => f.stato === "vale" && !f.zitto && ["da_fare", "previsto", "manca"].includes(f.tipo);
+function memRiga(r, oggi, conCose) {
+  if (!r.id) return `<div class="mem-reg">${svg("layers")}${memInl(r.testo)}</div>`;
+  if (r.testo.startsWith("|")) return `<div class="mem-tab md" data-f="${esc(r.id)}">${renderMd(r.testo)}</div>`;
+  const segno = r.stato === "chiuso" ? svg("ok") : r.tipo === "da_fare" ? "" : ["previsto", "manca", "decisione"].includes(r.tipo) ? svg(MEM_TIPI[r.tipo][1]) : "";
+  const data = r.data && ["previsto", "da_fare"].includes(r.tipo) && r.stato === "vale" ? `<em class="mem-d${r.data < oggi ? " tardi" : r.data === oggi ? " oggi" : ""}">${memGiorno(r.data, true)}</em>` : "";
+  const cose = conCose && r.cose?.length ? `<span class="mem-chi">${r.cose.map((c) => esc(c.nome)).join(" · ")}</span>` : "";
+  return `<button class="mem-r t-${r.tipo}${r.zitto ? " zitto" : ""}${r.stato === "chiuso" ? " chiuso" : ""}${r.registro ? " reg" : ""}" data-f="${esc(r.id)}" style="--rie:${r.rientro || 0}">
+    <i class="mem-s">${segno}</i><span class="mem-t">${cose}${memInl(r.testo)}</span>${data}</button>`;
+}
+function memHtml(d, lente) {
+  const n = d.conta, aperti = d.argomenti.reduce((s, a) => s + a.righe.filter((r) => r.id && memAperto(r)).length, 0);
+  let corpo = "";
+  if (lente === "cose") {
+    corpo = d.cose.length ? `<div class="mem-cose">${d.cose.map((c) => `<button class="mem-cosa" data-cosa="${esc(c.id)}">
+      <b>${esc(c.nome)}</b><small>${[MEM_GENERI[c.genere], c.serie ? "tiene un registro" : "", `${c.fatti} ${c.fatti === 1 ? "fatto" : "fatti"}`].filter(Boolean).join(" · ")}</small>
+      ${c.aperti ? `<i>${c.aperti}</i>` : ""}</button>`).join("")}</div>`
+      : `<p class="mem-vuoto">Ancora nessuna cosa: nascono da sole quando la memoria parla più volte dello stesso oggetto, luogo o persona.</p>`;
+  } else if (lente === "tempo") {
+    const poi = d.tempo.filter((f) => f.giorno > d.oggi && f.stato === "vale").reverse(), prima = d.tempo.filter((f) => !(f.giorno > d.oggi && f.stato === "vale"));
+    const gruppi = (lista) => { const g = []; for (const f of lista) { if (!g.length || g[g.length - 1][0] !== f.giorno) g.push([f.giorno, []]); g[g.length - 1][1].push(f); } return g; };
+    const blocco = (lista) => gruppi(lista).map(([g, fs]) => `<div class="mem-g${g === d.oggi ? " oggi" : ""}"><h4>${g === d.oggi ? "Oggi · " : ""}${memGiorno(g)}</h4>${fs.map((f) => memRiga(f, d.oggi, true)).join("")}</div>`).join("");
+    corpo = (poi.length ? `<div class="mem-lab">In arrivo</div>${blocco(poi)}` : "") + (prima.length ? `<div class="mem-lab">${poi.length ? "Fin qui" : "Nel tempo"}</div>${blocco(prima)}` : "")
+      || `<p class="mem-vuoto">Qui compaiono i fatti che hanno un giorno: quello che è successo e quello che deve succedere.</p>`;
+  } else {
+    corpo = d.argomenti.map((a) => `<section class="mem-arg"><h3>${esc(a.nome)}</h3>${a.righe.map((r) => memRiga(r, d.oggi)).join("")}</section>`).join("")
+      || `<p class="mem-vuoto">La memoria è vuota. Scrivi in chat cosa ricordare, o usa «Annota al volo»: si riempie da sola.</p>`;
+  }
+  return `<div class="mem" data-lente="${lente}"><div class="mem-lenti">
+      <button data-lente="argomenti" class="${lente === "argomenti" ? "on" : ""}">${svg("note")}Argomenti</button>
+      <button data-lente="cose" class="${lente === "cose" ? "on" : ""}">${svg("layers")}Cose<b>${n.cose}</b></button>
+      <button data-lente="tempo" class="${lente === "tempo" ? "on" : ""}">${svg("history")}Tempo</button></div>
+    <div class="mem-conta">${n.fatti} fatti${aperti ? ` · <b>${aperti}</b> ${aperti === 1 ? "aspetta te" : "aspettano te"}` : ""}${n.superati ? ` · ${n.superati} ${n.superati === 1 ? "cambiato" : "cambiati"} nel tempo` : ""}</div>
+    ${corpo}</div>`;
+}
+function memLega(root, { lente, fatto, cosa }) {
+  root.querySelectorAll("[data-lente]").forEach((b) => { if (b.tagName === "BUTTON") b.onclick = () => lente(b.dataset.lente); });
+  root.querySelectorAll("[data-f]").forEach((b) => b.onclick = (e) => { if (!e.target.closest("a")) fatto(b.dataset.f); });
+  root.querySelectorAll("[data-cosa]").forEach((b) => b.onclick = () => cosa(b.dataset.cosa));
+}
+// ---- un fatto: cos'è, da dove viene, cosa c'era prima, cosa ci puoi fare
+function memOrigine(o) {
+  return `<div class="mem-o"><i>${svg(MEM_DA[o.tipo] || "file")}</i><div><b>${esc(o.titolo)}${o.ruolo === "chiuso" ? " · chiuso qui" : o.ruolo === "ripetuto" ? " · ridetto qui" : ""}</b>
+    ${o.quando && o.tipo !== "nota" ? `<small>${memQuando(o.quando)}</small>` : ""}${o.testo ? `<q>${esc(o.testo)}</q>` : ""}
+    ${o.tipo === "chat" && o.rif && !/non c'è più/.test(o.titolo) ? `<button class="mem-link" data-chat="${esc(o.rif)}" data-pos="${o.pos ?? ""}">Apri la chat ${svg("right")}</button>` : ""}</div></div>`;
+}
+function memFattoHtml(f) {
+  const [nome, icona] = MEM_TIPI[f.tipo] || MEM_TIPI.dato, vale = f.stato === "vale";
+  const az = [];
+  if (vale && f.tipo === "da_fare") az.push(["chiudi", "ok", "Fatto", "main"], ["lascia", "x", "Non la faccio"]);
+  if (vale && f.tipo === "previsto") az.push(["chiudi", "ok", "È successo", "main"]);
+  if (vale && f.tipo === "manca") az.push(["chiudi", "ok", "Non manca più", "main"]);
+  if (vale && ["previsto", "manca"].includes(f.tipo)) az.push(f.zitto ? ["parla", "bell", "Ricordamelo"] : ["zitto", "bell", "Non ricordarmelo"]);
+  if (!vale) az.push(["riapri", "redo", "Riapri", "main"]);
+  az.push(["correggi", "edit", "Correggi"]);
+  if (vale) az.push(["togli", "trash", "Togli", "rosso"]);
+  return `<div class="mem-f">
+    <div class="mem-f-su"><span class="mem-tipo t-${f.tipo}">${svg(icona)}${nome}</span>${f.data ? `<span class="mem-quando">${svg("bell")}${memGiorno(f.data)}</span>` : ""}
+      ${!vale ? `<span class="mem-quando">${f.stato === "chiuso" ? (f.esito === "lasciato" ? "lasciata perdere" : "fatto") : f.stato}</span>` : f.zitto ? `<span class="mem-quando">non te lo ricordo</span>` : ""}
+      ${f.fiducia === "dedotto" ? `<span class="mem-quando" title="È una stima o un valore generale dell'assistente, non una cosa detta da te">dedotto</span>` : f.fiducia === "fonte" ? `<span class="mem-quando">da una fonte</span>` : ""}</div>
+    <div class="mem-f-t md" id="memTesto">${f.testo.startsWith("|") ? renderMd(f.testo) : memInl(f.testo)}</div>
+    <div class="mem-f-dove">${esc(f.argomento)}${f.sotto_di ? ` › ${esc(f.sotto_di.replace(/\*\*/g, "").slice(0, 60))}` : ""}</div>
+    ${f.cose.length ? `<div class="mem-f-cose">${f.cose.map((c) => `<button data-cosa="${esc(c.id)}">${svg("layers")}${esc(c.nome)}</button>`).join("")}</div>` : ""}
+    <div class="mem-az">${az.map(([k, ic, t, cl]) => `<button class="btn ${cl === "main" ? "main primary" : cl === "rosso" ? "mem-rosso" : ""}" data-fai="${k}">${svg(ic)}${t}</button>`).join("")}</div>
+    <div class="mem-lab">Da dove viene</div>
+    ${f.origini.length ? f.origini.map(memOrigine).join("") : `<p class="mem-vuoto">Non lo so: non è rimasta traccia.</p>`}
+    ${f.storia.length ? `<div class="mem-lab">Prima era</div>${f.storia.map((v) => `<div class="mem-prima"><span class="md">${memInl(v.testo)}</span>
+      <small>${v.origini[0] ? esc(v.origini[0].titolo) + (v.origini[0].quando && v.origini[0].tipo !== "nota" ? " · " + memQuando(v.origini[0].quando) : "") : memQuando(v.detto)}</small></div>`).join("")}` : ""}
+  </div>`;
+}
+// chiama(metodo, pezzo, corpo) parla col workspace; dopo(idNuovo|null) ridisegna; apri = { cosa(id), chat(id, pos) }
+function memFattoLega(root, f, chiama, dopo, apri) {
+  root.querySelectorAll("[data-cosa]").forEach((b) => b.onclick = () => apri.cosa(b.dataset.cosa));
+  root.querySelectorAll("[data-chat]").forEach((b) => b.onclick = () => apri.chat(b.dataset.chat, b.dataset.pos === "" ? null : +b.dataset.pos));
+  const fai = async (corpo, detto) => { try { const r = await chiama("POST", "fatti/" + f.id, corpo); toast(detto); dopo(corpo.fai === "togli" ? null : r.id); } catch (e) { toast(e.message, true); } };
+  root.querySelectorAll("[data-fai]").forEach((b) => b.onclick = () => {
+    const k = b.dataset.fai;
+    if (k !== "correggi") return fai({ fai: k }, { chiudi: "Segnato", lascia: "Lasciata perdere", zitto: "Non te lo ricordo più", parla: "Te lo ricordo", riapri: "Riaperto", togli: "Tolto: resta nella storia" }[k]);
+    const box = root.querySelector("#memTesto");
+    box.outerHTML = `<div class="mem-ed"><textarea id="memEd" rows="4">${esc(f.testo)}</textarea>
+      <div class="mem-ed-r"><label>Tipo<select id="memTipo">${Object.entries(MEM_TIPI).map(([k2, v]) => `<option value="${k2}"${k2 === f.tipo ? " selected" : ""}>${v[0]}</option>`).join("")}</select></label>
+        <label>Giorno<input type="date" id="memData" value="${f.data || ""}"></label>
+        <label>Argomento<select id="memArg">${f.argomenti.map((a) => `<option${a === f.argomento ? " selected" : ""}>${esc(a)}</option>`).join("")}</select></label></div>
+      <div class="mem-az"><button class="btn" data-no>Annulla</button><button class="btn main primary" data-si>${svg("ok")}Salva</button></div>
+      <small class="mem-nota">Se cambi il testo, quello di prima resta nella storia del fatto.</small></div>`;
+    root.querySelector(".mem-az:not(.mem-ed .mem-az)")?.remove();
+    const ed = root.querySelector("#memEd"); ed.focus();
+    root.querySelector("[data-no]").onclick = () => dopo(f.id);
+    root.querySelector("[data-si]").onclick = () => fai({ testo: ed.value, tipo: root.querySelector("#memTipo").value, data: root.querySelector("#memData").value || null, argomento: root.querySelector("#memArg").value }, "Corretto");
+  });
+}
+// ---- una cosa: tutto quello che la riguarda, in un posto solo
+function memCosaHtml(c, oggi) {
+  const gruppo = (titolo, lista) => lista.length ? `<div class="mem-lab">${titolo}<b>${lista.length}</b></div>${lista.map((f) => memRiga(f, oggi)).join("")}` : "";
+  const vale = c.fatti.filter((f) => f.stato === "vale"), giorno = (f) => f.data || "";
+  const aperti = vale.filter(memAperto), storia = c.fatti.filter((f) => !memAperto(f) && (["evento", "misura"].includes(f.tipo) || f.stato === "chiuso")).sort((a, b) => giorno(b).localeCompare(giorno(a)));
+  const so = vale.filter((f) => !aperti.includes(f) && !storia.includes(f));
+  return `<div class="mem-c"><div class="mem-c-su"><h3>${esc(c.nome)}</h3><button class="btn sm" data-rin>${svg("edit")}Rinomina</button></div>
+    <div class="mem-f-dove">${[MEM_GENERI[c.genere], c.sopra ? "parte di " + c.sopra : "", c.alias.length ? "detta anche " + c.alias.join(", ") : ""].filter(Boolean).map(esc).join(" · ") || "&nbsp;"}</div>
+    ${c.parti?.length ? `<div class="mem-f-cose">${c.parti.map((p) => `<button data-cosa="${esc(p.id)}">${svg("layers")}${esc(p.nome)}</button>`).join("")}</div>` : ""}
+    ${c.registro?.riepilogo?.length ? `<div class="mem-conti">${c.registro.riepilogo.slice(0, 4).map(([k, v]) => `<div><small>${esc(k)}</small><b>${esc(v)}</b></div>`).join("")}</div><button class="mem-link" data-registro>Apri il registro ${svg("right")}</button>` : ""}
+    ${c.altrove?.length ? `<div class="mem-altrove">${c.altrove.map((a) => `<button data-ws="${esc(a.ws)}" data-altra="${esc(a.id)}" style="--c:${esc(a.colore || "#999")}"><i></i>Se ne parla anche in «${esc(a.nome)}» · ${a.fatti} ${a.fatti === 1 ? "fatto" : "fatti"}${svg("right")}</button>`).join("")}</div>` : ""}
+    ${gruppo("Aspetta te", aperti)}${gruppo("Quello che so", so)}${gruppo("Storia", storia)}
+    ${c.tutte?.length ? `<details class="mem-unisci"><summary>È la stessa cosa di un'altra?</summary><div><select id="memAltra"><option value="">scegli…</option>${c.tutte.map((x) => `<option value="${esc(x.id)}">${esc(x.nome)}</option>`).join("")}</select>
+      <button class="btn sm" data-unisci>Unisci</button></div><small class="mem-nota">I fatti dell'altra passano a questa, e il suo nome resta come secondo nome.</small></details>` : ""}</div>`;
+}
+function memCosaLega(root, c, chiama, dopo, apri) {
+  root.querySelectorAll("[data-f]").forEach((b) => b.onclick = (e) => { if (!e.target.closest("a")) apri.fatto(b.dataset.f); });
+  root.querySelectorAll("[data-cosa]").forEach((b) => b.onclick = () => apri.cosa(b.dataset.cosa));
+  root.querySelectorAll("[data-altra]").forEach((b) => b.onclick = () => apri.altrove(b.dataset.ws, b.dataset.altra));
+  const reg = root.querySelector("[data-registro]"); if (reg) reg.onclick = () => apri.registro();
+  root.querySelector("[data-rin]").onclick = async () => {
+    const nome = await apri.chiedi("Come si chiama?", c.nome); if (!nome || nome === c.nome) return dopo();
+    try { await chiama("POST", "cose/" + c.id, { nome }); toast("Rinominata"); } catch (e) { toast(e.message, true); } dopo();
+  };
+  const un = root.querySelector("[data-unisci]");
+  if (un) un.onclick = async () => {
+    const altra = root.querySelector("#memAltra").value; if (!altra) return;
+    try { await chiama("POST", "cose/" + c.id, { unisci: altra }); toast("Unite"); } catch (e) { toast(e.message, true); } dopo();
+  };
+}
+
 async function registroSheet() {
   const wid = A.wid, chiama = (m, pezzo, body) => api(m, `workspace/${wid}/registro` + (pezzo ? "/" + pezzo : ""), body);
   const s = sheet(`<div class="registri"><h3 class="sh">${svg("layers")}Registri<small>i conti li fa il Mac</small></h3><div id="regCorpo"><div class="sk-lines"><i></i><i></i><i></i><i></i></div></div></div>`, "tall");
