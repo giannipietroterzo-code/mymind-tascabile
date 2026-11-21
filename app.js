@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.39";
+const VERSIONE = "1.40";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -857,8 +857,17 @@ async function condivisoInArrivo() {
 
 // ---------------------------------------------------------------- avvisi all'apertura
 // Scadenze e cose aperte che il Mac legge dalle note. Niente notifiche: un foglio alla prima apertura del giorno,
-// e la campanella in alto per rivederli. «Fatto» lo scrive nella nota; «Nascondi» lo toglie solo da questo telefono.
+// e la campanella in alto per rivederli. «Fatto» lo scrive nella nota. Fatto o no, un avviso chiuso non torna: lo ricorda il Mac, per tutti i dispositivi.
 const nascosti = () => { try { return JSON.parse(localStorage.getItem("mmt-avvisi-nascosti") || "{}"); } catch { return {}; } };
+// Finché il Mac continua a mandare un avviso che qui risulta chiuso, glielo ridico (anche quelli chiusi senza rete, o prima di questa versione)
+const avvisiDetti = new Set();
+function avvisiDillo(esiti = {}) {
+  const via = nascosti(), voci = (A.avvisi?.voci || []).filter((v) => via[v.id] && !avvisiDetti.has(v.id));
+  if (!voci.length) return;
+  voci.forEach((v) => avvisiDetti.add(v.id));
+  api("POST", "avvisi/chiudi", { voci: voci.map((v) => ({ id: v.id, ws: v.ws, testo: v.testo, data: v.data, registro: v.registro, esito: esiti[v.id] || "no" })) })
+    .catch(() => voci.forEach((v) => avvisiDetti.delete(v.id)));
+}
 function avvisiScelti() {
   const a = A.avvisi; if (!a) return { ritardo: [], oggi: [], prossimi: [], aperte: [], n: 0 };
   const via = nascosti(), g = (d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
@@ -880,6 +889,7 @@ function dipingiAvvisi() {
 }
 async function caricaAvvisi(riprova = true) {
   try { A.avvisi = await api("GET", "avvisi"); } catch { return; }
+  avvisiDillo();
   dipingiAvvisi();
   if (A.avvisi.aggiorno && riprova) setTimeout(() => caricaAvvisi(false), 30e3);     // il Mac sta rileggendo una nota cambiata
   const giorno = A.avvisi.oggi;
@@ -929,12 +939,12 @@ function mostraAvvisi(tutti) {
   if (s.querySelector("#avTutti")) s.querySelector("#avTutti").onclick = () => mostraAvvisi(true);
   s.querySelectorAll(".av").forEach((el) => {
     const v = A.avvisi.voci.find((x) => x.id === el.dataset.id);
-    const nascondi = () => { const n = nascosti(); n[v.id] = Date.now(); localStorage.setItem("mmt-avvisi-nascosti", JSON.stringify(n)); dipingiAvvisi(); };
+    const nascondi = (esito = "no") => { const n = nascosti(); n[v.id] = Date.now(); localStorage.setItem("mmt-avvisi-nascosti", JSON.stringify(n)); avvisiDillo({ [v.id]: esito }); dipingiAvvisi(); };
     scorrevole(el, el.querySelector(".av-t"), {
       tocco: () => { closeSheet(); apriWs(v.ws, "nota"); },
-      sinistra: nascondi,
+      sinistra: () => nascondi("no"),
       destra: () => {
-        nascondi();
+        nascondi("fatto");
         if (v.registro) api("POST", `workspace/${v.ws}/registro/voce`, { ...v.registro, data: regOggi() }).then(() => toast(`Segnato nel registro di «${v.nome}»`), (e) => toast(e.message, true));
         else cattura({ testo: "Fatto: " + v.testo, ws: v.ws }).catch((e) => toast(e.message, true));
       },
