@@ -583,13 +583,11 @@ details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
 .reg-fb .via { color: var(--danger, var(--bad, #c0392b)); }
 .reg-vuoto { text-align: center; padding: 34px 16px; color: var(--muted); } .reg-vuoto svg { width: 30px; height: 30px; color: var(--faint); }
 .reg-vuoto b { display: block; margin: 8px 0 6px; color: var(--text); font-weight: 600; font-size: 16px; } .reg-vuoto p { max-width: 430px; margin: 0 auto; font-size: 14px; line-height: 1.5; }
-.reg-attesa { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 13.5px; margin: 0 0 12px; }
 .reg-nota { color: var(--faint); font-size: 12.5px; margin: 4px 2px 0; }
 [data-stile="tech"] .reg { border-radius: 8px; box-shadow: inset 3px 0 0 var(--ws); } [data-stile="tech"] :is(.reg-riep div, .reg-f) { border-radius: 6px; }
 [data-stile="tech"] :is(.reg-tipo, .reg-ev, .reg-piu, .reg-f input, .reg-f select, .reg-fb button) { border-radius: 5px; }
 @media (max-width: 560px) { .reg-r { grid-template-columns: 78px 70px minmax(0, 1fr); } .reg-r .x { grid-column: 2 / -1; text-align: left; } .reg-riep { grid-template-columns: 1fr 1fr; } }
 .nhead-b { display: flex; gap: 8px; }
-.registri #regRil { width: 100%; justify-content: center; margin: 6px 0 4px; }
 
 .reg-az { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .reg-az button { font: inherit; font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 99px; border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; }

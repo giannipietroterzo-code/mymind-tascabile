@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.46";
+const VERSIONE = "1.47";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -906,7 +906,6 @@ async function caricaAvvisi(riprova = true) {
   try { A.avvisi = await api("GET", "avvisi"); } catch { return; }
   avvisiDillo();
   dipingiAvvisi();
-  if (A.avvisi.aggiorno && riprova) setTimeout(() => caricaAvvisi(false), 30e3);     // il Mac sta rileggendo una nota cambiata
   const giorno = A.avvisi.oggi;
   if (localStorage.getItem("mmt-avvisi-giorno") !== giorno && avvisiScelti().n && !A.wid && !$("sheet").classList.contains("open")) {
     localStorage.setItem("mmt-avvisi-giorno", giorno);
@@ -1700,9 +1699,9 @@ function regRapidi(s) {
   return "";
 }
 function regHtml(d) {
-  if (!d.serie.length) return `<div class="reg-vuoto">${svg("layers")}<b>${d.aggiorno ? "Leggo la nota e preparo i registri…" : "Ancora nessun registro"}</b>
+  if (!d.serie.length) return `<div class="reg-vuoto">${svg("layers")}<b>Ancora nessun registro</b>
     <p>Qui finiscono da sole le cose che si ripetono: un sacco aperto, un rabbocco, una lettura. Scrivile in un appunto o in chat («stamattina ho aperto un sacco di mangime») e MyMind tiene il conto: quanto dura, quanto consuma, quando finisce.</p></div>`;
-  return (d.aggiorno ? `<p class="reg-attesa"><span class="waiting"><i></i><i></i><i></i></span>Rileggo la nota…</p>` : "") + d.serie.map((s) => `<section class="reg" data-s="${s.id}">
+  return d.serie.map((s) => `<section class="reg" data-s="${s.id}">
     <header><h4>${esc(s.nome)}</h4><span class="reg-tipo">${REG_TIPO[s.tipo]}${s.unita ? " · " + esc(s.unita) : ""}</span><button class="reg-piu" data-piu title="Aggiungi una riga a mano">${svg("plus")}</button></header>
     <div class="reg-riep">${s.riepilogo.map(([k, v]) => `<div class="${/verso/i.test(k) ? "forte" : ""}"><small>${esc(k)}</small><b>${esc(v)}</b></div>`).join("")}</div>
     ${regRapidi(s)}
@@ -1901,10 +1900,8 @@ async function registroSheet() {
   const s = sheet(`<div class="registri"><h3 class="sh">${svg("layers")}Registri<small>i conti li fa il Mac</small></h3><div id="regCorpo"><div class="sk-lines"><i></i><i></i><i></i><i></i></div></div></div>`, "tall");
   const dis = (d) => {
     const c = s.querySelector("#regCorpo"); if (!c) return;
-    c.innerHTML = regHtml(d) + `<button class="btn" id="regRil">${svg("redo")}Rileggi dalla nota</button>`;
+    c.innerHTML = regHtml(d);
     regLega(c, d, chiama, dis);
-    c.querySelector("#regRil").onclick = async () => { try { dis(await chiama("POST", "rileggi", {})); } catch (e) { toast(e.message, true); } };
-    if (d.aggiorno) setTimeout(async () => { if (s.querySelector("#regCorpo") && !s.querySelector(".reg-f")) { try { dis(await chiama("GET")); } catch {} } }, 4000);
   };
   try { dis(await chiama("GET")); } catch (e) { const c = s.querySelector("#regCorpo"); if (c) c.innerHTML = `<p class="vuoto">${esc(e.message)}</p>`; }
 }
