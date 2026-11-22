@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.47";
+const VERSIONE = "1.48";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -549,7 +549,7 @@ function dipingiStato() {
 }
 function blocca() {
   if (nuovaVersione && !daSalvare.size) return aggiorna();   // è il momento giusto per la versione nuova, ma non con una chat da salvare
-  Tunnel.ferma(); A.sec = null; A.chat = null; A.wid = null;
+  Tunnel.ferma(); A.sec = null; A.chat = null; A.wid = null; minoVia();
   $("sheet").className = ""; $("sheet-bg").className = ""; $("sheet").innerHTML = "";   // niente fogli aperti sopra la schermata di blocco
   blobs.forEach((u) => URL.revokeObjectURL(u)); blobs.clear();
   sblocca();
@@ -570,7 +570,7 @@ function casa() {
   $("app").innerHTML = `<div class="home">
     <header class="top"><div class="brand">${LOGO}<b>MyMind</b>${versioneHtml()}</div><span id="stato" class="stato"></span><button class="ib campana" id="avvisiBtn" aria-label="Da ricordare">${svg("bell")}<i id="avvisiN"></i></button><button class="ib" id="menu">${svg("dots")}</button></header>
     <section class="hero">
-      <form class="askall" id="askall"><span>${svg("layers")}</span><input id="askq" placeholder="Chiedi a tutti i workspace…" enterkeyhint="send" autocomplete="off"><button class="ib main" aria-label="Chiedi">${svg("up")}</button></form>
+      <form class="askall" id="askall"><span class="mino-av">${LOGO}</span><input id="askq" placeholder="Di' o chiedi qualcosa a Mino…" enterkeyhint="send" autocomplete="off"><button class="ib main" aria-label="Chiedi">${svg("up")}</button></form>
       <button class="annota" id="annota"><span class="ic">${svg("edit")}</span><span class="tx"><b>Annota al volo</b><small>Un pensiero, una misura, una foto: lo metto io al posto giusto</small></span><span class="mic" id="annotaMic">${svg("mic")}</span></button>
       <p class="in-attesa"></p>
       <div class="duo"><button id="sapereBtn">${svg("search")}Tutto su…</button><button id="diarioBtn">${svg("ws_calendario")}Diario</button></div></section>
@@ -583,7 +583,8 @@ function casa() {
     <footer class="foot-home">${svg("key")}Cifrato dal telefono al Mac · ${esc(A.sec?.nome || "")}</footer></div>`;
   dipingiStato();
   $("app").querySelectorAll("[data-ws]").forEach((b) => b.onclick = () => apriWs(b.dataset.ws));
-  $("askall").onsubmit = (e) => { e.preventDefault(); const q = $("askq").value.trim(); if (!q) return; apriWs("_tutti").then(() => { $("input").value = q; invia(); }); };
+  $("askall").onsubmit = (e) => { e.preventDefault(); const q = $("askq").value.trim(); if (!q) return; $("askq").value = ""; $("askq").blur(); minoApri(q); };
+  minoBottone();
   $("menu").onclick = menu;
   $("annota").onclick = (e) => annotaSheet({ detta: !!e.target.closest("#annotaMic") });   // sul microfono: parte già in ascolto
   dipingiPosta(); dipingiAttesa();
@@ -1632,6 +1633,9 @@ async function memDisegna() {
   dis();
 }
 const memChiama = (wid) => (m, pezzo, body) => api(m, `workspace/${wid}/${pezzo}`, body);
+const memApriDi = (wid) => wid === A.wid ? memApri : { ...memApri, cosa: (id) => memCosa(id, wid), fatto: (id) => memFatto(id, wid),
+  registro: () => toast("Apri «" + (A.wss.find((x) => x.id === wid)?.nome || wid) + "» per vedere il suo registro"),
+  chat: () => toast("Quella chat è in «" + (A.wss.find((x) => x.id === wid)?.nome || wid) + "»") };
 const memApri = {
   cosa: (id) => memCosa(id), fatto: (id) => memFatto(id), registro: () => registroSheet(),
   chiedi: (titolo, valore) => chiediTesto(titolo, valore),
@@ -1642,19 +1646,19 @@ const memApri = {
   altrove: async (ws, id) => { closeSheet(); history.back(); setTimeout(async () => { await apriWs(ws, "nota"); memCosa(id); }, 350); },
 };
 async function memRicarica() { A.nota = null; A.mem = null; if (A.tab === "nota") await disegnaNota(); caricaAvvisi?.(); }
-async function memFatto(id) {
-  const wid = A.wid, s = sheet(`<div id="memFoglio"><div class="sk-lines"><i></i><i></i><i></i></div></div>`, "tall");
+async function memFatto(id, w) {                        // w: un altro workspace (quando lo apre Mino)
+  const wid = w || A.wid, memApri = memApriDi(wid), s = sheet(`<div id="memFoglio"><div class="sk-lines"><i></i><i></i><i></i></div></div>`, "tall");
   let f; try { f = await api("GET", `workspace/${wid}/fatti/${encodeURIComponent(id)}`); } catch (e) { toast(e.message, true); return closeSheet(); }
   const box = s.querySelector("#memFoglio"); if (!box) return;
   box.innerHTML = memFattoHtml(f);
-  memFattoLega(box, f, memChiama(wid), async (nuovo) => { await memRicarica(); nuovo ? memFatto(nuovo) : closeSheet(); }, memApri);
+  memFattoLega(box, f, memChiama(wid), async (nuovo) => { await memRicarica(); nuovo ? memFatto(nuovo, wid) : closeSheet(); }, memApri);
 }
-async function memCosa(id) {
-  const wid = A.wid, s = sheet(`<div id="memFoglio"><div class="sk-lines"><i></i><i></i><i></i></div></div>`, "tall");
+async function memCosa(id, w) {
+  const wid = w || A.wid, memApri = memApriDi(wid), s = sheet(`<div id="memFoglio"><div class="sk-lines"><i></i><i></i><i></i></div></div>`, "tall");
   let c; try { c = await api("GET", `workspace/${wid}/cose/${encodeURIComponent(id)}`); } catch (e) { toast(e.message, true); return closeSheet(); }
   const box = s.querySelector("#memFoglio"); if (!box) return;
   box.innerHTML = memCosaHtml(c, new Date().toLocaleDateString("sv"));
-  memCosaLega(box, c, memChiama(wid), async () => { await memRicarica(); memCosa(c.id); }, memApri);
+  memCosaLega(box, c, memChiama(wid), async () => { await memRicarica(); memCosa(c.id, wid); }, memApri);
 }
 
 
@@ -1895,6 +1899,208 @@ function memCosaLega(root, c, chiama, dopo, apri) {
   };
 }
 
+// Mino sul telefono: un pulsante sempre presente. Un tocco lo apre; tenuto premuto ti ascolta, e quando lo lasci la frase parte.
+const MINO_CASA = {
+  tocco: true,
+  api: (m, pezzo, body) => api(m, pezzo, m === "GET" || m === "DELETE" ? undefined : body),
+  flusso: async (corpo, suRiga) => {
+    const riga = ((corpo, suRiga) => { let buf = ""; return (t) => { buf += t; let nl; while ((nl = buf.indexOf("\n")) >= 0) { const l = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1); if (l) { try { suRiga(JSON.parse(l)); } catch {} } } }; })(corpo, suRiga);
+    await Tunnel.chiama("POST", "mino", { corpo, attesa: 180e3, onPezzo: riga });
+    riga("\n");
+  },
+  dove: () => A.wid && !isSpecial() ? { ws: A.wid, nome: ws().nome } : {},
+  fatto: (id, w) => memFatto(id, w), cosa: (id, w) => memCosa(id, w),
+  dopo: () => { A.nota = null; A.mem = null; if (A.wid && A.tab === "nota") disegnaNota(); caricaAvvisi(); caricaPosta(); },
+  apri: () => minoApri(),
+  aperto: () => { if (!history.state?.mino) history.pushState({ mino: 1 }, ""); },      // così il tasto Indietro lo chiude
+  chiudi: () => { if (history.state?.mino) history.back(); else minoChiudi(); },
+};
+function minoBottone() {                                  // compare dopo lo sblocco, sparisce al blocco
+  if ($("minoBtn") || !A.sec) return;
+  const b = document.createElement("button"); b.id = "minoBtn"; b.setAttribute("aria-label", "Mino"); b.innerHTML = LOGO;
+  document.body.appendChild(b); minoPulsante(b);
+}
+function minoVia() { $("minoBtn")?.remove(); $("mino")?.remove(); document.body.classList.remove("mino-aperto"); Object.assign(Mino, { msgs: [], vivo: null, caricato: false }); }
+// ================================================================ Mino: l'assistente a cui si parla
+// Una conversazione sola, uguale su Mac e telefono. Non ci sono modi da scegliere: gli dici una cosa e la annota, gli chiedi
+// una cosa e la cerca, gli chiedi di fare e fa, ci ragioni e non scrive niente. Sotto i suoi messaggi compaiono le carte di
+// ciò che ha fatto (con «Annulla»), i fatti che cita si toccano, e le risposte già pronte si mandano con un tocco.
+// Questo pezzo è uguale nelle due app; ognuna gli dà MINO_CASA: come parlare col Mac e cosa aprire.
+const Mino = { msgs: [], vivo: null, caricato: false, oggi: "", voce: localStorage.getItem("mino.voce") === "1", ascolto: null };
+const minoAperto = () => !!document.getElementById("mino")?.classList.contains("open");
+function minoTesto(t, vivo) {
+  if (vivo) t = t.replace(/\n\s*(→|->|>>)[^\n]*$/, "").replace(/\[f:[^\]]*$/, "");
+  const rif = [];
+  t = t.replace(/((?:\s*\[f:[^\]]+\])+)([.,;:!?])/g, "$2$1");        // il numerino va dopo il punto, non prima
+  const pulito = t.replace(/\s*\[f:([a-z0-9_-]+)\/([0-9a-f]{8})\]/g, (m, ws, id) => { rif.push([ws, id]); return `⟦${rif.length - 1}⟧`; });
+  return renderMd(pulito).replace(/⟦(\d+)⟧/g, (m, i) => `<button class="mino-f" data-mf="${rif[i][1]}" data-mw="${rif[i][0]}" title="Da dove lo so">${+i + 1}</button>`);
+}
+const MINO_OP = { nuovo: ["plus", "Annotato"], cambiato: ["edit", "Cambiato"], chiuso: ["ok", "Chiuso"], lasciato: ["x", "Lasciato perdere"], zittito: ["bell", "Non te lo ricordo più"], tolto: ["trash", "Tolto"] };
+function minoCarta(c, i, mi) {
+  if (c.tipo === "cosa") return `<button class="mino-c cosa" data-mc="${esc(c.id)}" data-mw="${esc(c.ws)}">${svg("layers")}<span><b>${esc(c.nome)}</b><small>Tutto quello che so · ${c.fatti} ${c.fatti === 1 ? "fatto" : "fatti"} · ${esc(c.ws_nome)}</small></span>${svg("right")}</button>`;
+  if (c.tipo === "io") return `<div class="mino-c io">${svg("key")}<span><small>Me lo ricordo, su di te</small><b>${esc(c.testo)}</b></span></div>`;
+  const [ic, nome] = MINO_OP[c.op] || MINO_OP.nuovo;
+  return `<div class="mino-c op${c.annullato ? " via" : ""}"><i>${svg(ic)}</i><span ${c.fatto ? `data-mf="${esc(c.fatto)}" data-mw="${esc(c.ws)}"` : ""}><small>${c.annullato ? "Annullato" : nome} · ${esc(c.ws_nome)}</small><b>${memInl(c.testo || "")}</b>${c.prima ? `<s>${memInl(c.prima)}</s>` : ""}</span>
+    ${c.annulla && !c.annullato ? `<button class="mino-ann" data-ann="${mi}:${i}">Annulla</button>` : ""}</div>`;
+}
+function minoMsg(m, mi, ultimo) {
+  if (m.chi === "tu") return `<div class="mino-m tu"><p>${esc(m.testo)}</p></div>`;
+  return `<div class="mino-m lui${m.vivo ? " vivo" : ""}">${m.punto ? `<span class="mino-lab">${svg("sun")}Il punto di oggi</span>` : ""}
+    ${m.testo ? `<div class="md">${minoTesto(m.testo, m.vivo)}</div>` : ""}
+    ${m.passo ? `<div class="mino-passo"><span class="waiting"><i></i><i></i><i></i></span>${esc(m.passo)}…</div>` : ""}
+    ${(m.carte || []).length ? `<div class="mino-carte">${m.carte.map((c, i) => minoCarta(c, i, mi)).join("")}</div>` : ""}
+    ${ultimo && !m.vivo && (m.proposte || []).length ? `<div class="mino-prop">${m.proposte.map((p) => `<button data-prop="${esc(p)}">${esc(p)}</button>`).join("")}</div>` : ""}</div>`;
+}
+function minoDisegna(inFondo = true) {
+  const c = document.getElementById("minoCorpo"); if (!c) return;
+  const tutti = Mino.vivo ? [...Mino.msgs, Mino.vivo] : Mino.msgs, giu = c.scrollHeight - c.scrollTop - c.clientHeight < 120;
+  c.innerHTML = tutti.length ? tutti.map((m, i) => (i && new Date(m.t * 1000).toDateString() !== new Date(tutti[i - 1].t * 1000).toDateString() ? `<div class="mino-giorno">${new Date(m.t * 1000).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}</div>` : "") + minoMsg(m, i, i === tutti.length - 1)).join("")
+    : Mino.caricato ? `<div class="mino-vuoto"><span class="mino-av grande">${LOGO}</span><h3>Sono Mino.</h3><p>Dimmi una cosa e la annoto. Chiedimi una cosa e la cerco. Oppure ragioniamo insieme: finché non me lo dici non scrivo niente.</p>
+      <div class="mino-prop">${["Cosa devo fare oggi?", "Cosa sai di me?", "Come funzioni?"].map((p) => `<button data-prop="${esc(p)}">${esc(p)}</button>`).join("")}</div></div>` : `<div class="mino-vuoto"><span class="waiting"><i></i><i></i><i></i></span></div>`;
+  c.querySelectorAll("[data-mf]").forEach((b) => b.onclick = () => MINO_CASA.fatto(b.dataset.mf, b.dataset.mw));
+  c.querySelectorAll("[data-mc]").forEach((b) => b.onclick = () => MINO_CASA.cosa(b.dataset.mc, b.dataset.mw));
+  c.querySelectorAll("[data-prop]").forEach((b) => b.onclick = () => minoManda(b.dataset.prop));
+  c.querySelectorAll("[data-ann]").forEach((b) => b.onclick = () => minoAnnulla(...b.dataset.ann.split(":").map(Number)));
+  if (inFondo && (giu || Mino.vivo)) c.scrollTop = c.scrollHeight;
+}
+async function minoAnnulla(mi, ci) {
+  const carta = Mino.msgs[mi]?.carte?.[ci]; if (!carta?.annulla) return;
+  try {
+    if (carta.annulla.appunto) await MINO_CASA.api("POST", `annota/${carta.annulla.appunto}/annulla`, {});
+    else await MINO_CASA.api("POST", `workspace/${carta.annulla.ws}/fatti/${carta.annulla.fatto}`, { fai: carta.annulla.fai });
+    for (const c of Mino.msgs[mi].carte) if (c.annulla && JSON.stringify(c.annulla) === JSON.stringify(carta.annulla)) c.annullato = true;
+    toast("Annullato"); minoDisegna(false); MINO_CASA.dopo();
+  } catch (e) { toast(e.message, true); }
+}
+function minoDici(testo) {
+  if (!Mino.voce || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(testo.replace(/\[f:[^\]]*\]/g, "").replace(/[*_`#>|]/g, " ").replace(/\s+/g, " ").trim());
+  u.lang = "it-IT"; u.rate = 1.05; speechSynthesis.speak(u);
+}
+async function minoManda(testo) {
+  testo = (testo || "").trim();
+  if (!testo || Mino.vivo) return;
+  window.speechSynthesis?.cancel();
+  const inp = document.getElementById("minoIn"); if (inp) { inp.value = ""; inp.style.height = ""; }
+  Mino.msgs.push({ chi: "tu", testo, t: Date.now() / 1000, locale: true });
+  Mino.vivo = { chi: "mino", testo: "", t: Date.now() / 1000, carte: [], passo: "Ci penso", vivo: true };
+  minoDisegna(); document.getElementById("mino")?.classList.add("occupato");
+  let scritto = false, fine = null, errore = null;
+  try {
+    await MINO_CASA.flusso({ testo, dove: MINO_CASA.dove() }, (j) => {
+      if (j.passo) Mino.vivo.passo = j.passo;
+      if (j.testo) { Mino.vivo.testo += j.testo; Mino.vivo.passo = ""; }
+      if (j.carte) { Mino.vivo.carte.push(...j.carte); scritto = scritto || j.carte.some((c) => c.tipo === "op"); }
+      if (j.errore) errore = j.errore;
+      if (j.fine) fine = j.fine.messaggi;
+      minoDisegna();
+    });
+  } catch (e) { errore = errore || e.message; }
+  Mino.vivo = null; document.getElementById("mino")?.classList.remove("occupato");
+  if (fine) { Mino.msgs.pop(); Mino.msgs.push(...fine); minoDici(fine[1].testo); }
+  else Mino.msgs.push({ chi: "mino", testo: "Non ci sono riuscito: " + (errore || "il Mac non risponde") + ".", t: Date.now() / 1000, carte: [], proposte: [testo] });
+  minoDisegna();
+  if (scritto) MINO_CASA.dopo();
+}
+async function minoCarica() {
+  try {
+    const r = await MINO_CASA.api("GET", "mino");
+    Mino.msgs = r.messaggi; Mino.oggi = r.oggi; Mino.caricato = true; minoDisegna();
+    if (!r.messaggi.some((m) => m.punto === r.oggi)) {            // la prima volta di oggi: il punto della giornata
+      Mino.vivo = { chi: "mino", testo: "", t: Date.now() / 1000, carte: [], passo: "Guardo cosa c'è oggi", vivo: true }; minoDisegna();
+      const p = await MINO_CASA.api("POST", "mino/punto", {}).catch(() => null);
+      Mino.vivo = null;
+      if (p?.messaggi?.length) Mino.msgs.push(...p.messaggi);
+      minoDisegna();
+    }
+  } catch (e) { Mino.caricato = true; minoDisegna(); toast(e.message, true); }
+}
+// il microfono: Chrome scrive mentre parli; quando ti fermi (o tocchi di nuovo) la frase parte da sola
+function minoAscolta(suTesto, suFine) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) return null;
+  const unisci = typeof dettato === "function" ? dettato : (p) => p.join(" ");
+  const r = new SR(); r.lang = "it-IT"; r.continuous = true; r.interimResults = true;
+  let detto = "";
+  r.onresult = (e) => { const fermi = []; let prov = ""; for (const x of e.results) x.isFinal ? fermi.push(x[0].transcript) : prov += x[0].transcript; detto = (unisci(fermi) + " " + prov).trim(); suTesto(detto); };
+  r.onerror = (e) => { if (!["aborted", "no-speech"].includes(e.error)) toast("Il microfono non va: " + e.error, true); };
+  r.onend = () => { Mino.ascolto = null; suFine(detto); };
+  try { r.start(); Mino.ascolto = r; navigator.vibrate?.(12); } catch { toast("Il microfono non parte", true); return null; }
+  return r;
+}
+function minoMic() {
+  const b = document.getElementById("minoMic"), inp = document.getElementById("minoIn");
+  if (Mino.ascolto) return Mino.ascolto.stop();
+  if (minoAscolta((t) => { inp.value = t; }, (t) => { b?.classList.remove("on"); if (t) minoManda(t); })) b.classList.add("on");
+}
+function minoApri(testo) {
+  if (!document.getElementById("mino")) minoMonta();
+  const el = document.getElementById("mino");
+  if (!el.classList.contains("open")) { el.classList.add("open"); document.body.classList.add("mino-aperto"); MINO_CASA.aperto?.(); }
+  const dove = MINO_CASA.dove();
+  document.getElementById("minoDove").textContent = dove?.nome ? "sei in " + dove.nome : "su tutto il second brain";
+  if (!Mino.caricato) minoCarica().then(() => { if (testo) minoManda(testo); });
+  else { minoDisegna(); if (testo) minoManda(testo); }
+  if (!testo && !MINO_CASA.tocco) setTimeout(() => document.getElementById("minoIn")?.focus(), 200);
+}
+function minoChiudi() {
+  const el = document.getElementById("mino"); if (!el?.classList.contains("open")) return;
+  el.classList.remove("open"); document.body.classList.remove("mino-aperto");
+  Mino.ascolto?.stop(); window.speechSynthesis?.cancel();
+}
+async function minoMenu() {
+  const io = await MINO_CASA.api("GET", "mino/io").catch(() => ({ voci: [] }));
+  const c = document.getElementById("minoCorpo");
+  c.innerHTML = `<div class="mino-io"><h3>Cosa so di te</h3><p class="mem-nota">Sono le cose che mi hai detto di te e di come vuoi essere aiutato. Le uso in ogni risposta.</p>
+    ${io.voci.length ? io.voci.map((v) => `<div class="mino-c io"><span><b>${esc(v.testo)}</b></span><button class="mino-ann" data-via="${esc(v.id)}">Dimentica</button></div>`).join("") : `<p class="mem-vuoto">Ancora niente. Dimmi per esempio «preferisco le risposte corte», o come ti chiami.</p>`}
+    <div class="mem-az"><button class="btn" data-torna>${svg("left")}Torna a parlare</button><button class="btn" data-nuovo>${svg("redo")}Cambiamo discorso</button></div>
+    <p class="mem-nota">«Cambiamo discorso»: la conversazione resta scritta, ma da qui in poi non mi porto dietro quello che ci siamo detti prima.</p></div>`;
+  c.querySelector("[data-torna]").onclick = () => minoDisegna();
+  c.querySelector("[data-nuovo]").onclick = async () => { await MINO_CASA.api("POST", "mino/nuovo", {}).catch(() => {}); toast("Va bene, ripartiamo da capo"); minoDisegna(); };
+  c.querySelectorAll("[data-via]").forEach((b) => b.onclick = async () => { await MINO_CASA.api("DELETE", "mino/io/" + b.dataset.via).catch(() => {}); minoMenu(); });
+}
+function minoMonta() {
+  if (document.getElementById("mino")) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const el = document.createElement("div"); el.id = "mino";
+  el.innerHTML = `<header><span class="mino-av">${LOGO}</span><span class="mino-chi"><b>Mino</b><small id="minoDove"></small></span>
+      <button class="mino-ib${Mino.voce ? " on" : ""}" id="minoVoce" title="Leggi le risposte ad alta voce">${svg("volume")}</button>
+      <button class="mino-ib" id="minoMenuB" title="Cosa so di te · cambiamo discorso">${svg("dots")}</button>
+      <button class="mino-ib" id="minoX" title="Chiudi">${svg("x")}</button></header>
+    <div id="minoCorpo"></div>
+    <form id="minoForm"><textarea id="minoIn" rows="1" placeholder="Dimmi, chiedimi, o ragiona con me…" enterkeyhint="send"></textarea>
+      ${SR ? `<button type="button" class="mino-ib mic" id="minoMic" title="Parla">${svg("mic")}</button>` : ""}<button class="mino-ib manda" title="Manda">${svg("up")}</button></form>`;
+  document.body.appendChild(el);
+  const inp = el.querySelector("#minoIn");
+  el.querySelector("#minoForm").onsubmit = (e) => { e.preventDefault(); minoManda(inp.value); };
+  inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); minoManda(inp.value); } if (e.key === "Escape") MINO_CASA.chiudi(); };
+  inp.oninput = () => { inp.style.height = ""; inp.style.height = Math.min(inp.scrollHeight, 140) + "px"; };
+  el.querySelector("#minoX").onclick = () => MINO_CASA.chiudi();
+  el.querySelector("#minoMenuB").onclick = minoMenu;
+  el.querySelector("#minoVoce").onclick = (e) => { Mino.voce = !Mino.voce; localStorage.setItem("mino.voce", Mino.voce ? "1" : "0"); e.currentTarget.classList.toggle("on", Mino.voce); window.speechSynthesis?.cancel(); toast(Mino.voce ? "Ti leggo le risposte ad alta voce" : "Voce spenta"); };
+  if (SR) el.querySelector("#minoMic").onclick = minoMic;
+}
+// il pulsante di Mino: un tocco lo apre; tenuto premuto ti ascolta subito, e quando lo lasci la frase parte
+function minoPulsante(b) {
+  let timer = 0, parlando = false, strato = null;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const giu = (e) => {
+    if (e.button) return;
+    timer = setTimeout(() => {
+      timer = 0; if (!SR) return;
+      strato = document.createElement("div"); strato.className = "mino-ascolto"; strato.innerHTML = `<span class="mino-av grande">${LOGO}</span><b>Ti ascolto…</b><p></p><small>Lascia per mandare</small>`;
+      document.body.appendChild(strato); b.classList.add("on");
+      parlando = !!minoAscolta((t) => { strato.querySelector("p").textContent = t; }, (t) => { strato?.remove(); strato = null; b.classList.remove("on"); parlando = false; if (t) minoApri(t); });
+      if (!parlando) { strato.remove(); strato = null; b.classList.remove("on"); }
+    }, 320);
+  };
+  const su = () => { if (timer) { clearTimeout(timer); timer = 0; minoAperto() ? MINO_CASA.chiudi() : MINO_CASA.apri(); } else if (parlando) Mino.ascolto?.stop(); };
+  b.addEventListener("pointerdown", giu);
+  b.addEventListener("pointerup", su);
+  b.addEventListener("pointercancel", () => { clearTimeout(timer); timer = 0; if (parlando) Mino.ascolto?.stop(); });
+  b.addEventListener("contextmenu", (e) => e.preventDefault());
+}
+
 async function registroSheet() {
   const wid = A.wid, chiama = (m, pezzo, body) => api(m, `workspace/${wid}/registro` + (pezzo ? "/" + pezzo : ""), body);
   const s = sheet(`<div class="registri"><h3 class="sh">${svg("layers")}Registri<small>i conti li fa il Mac</small></h3><div id="regCorpo"><div class="sk-lines"><i></i><i></i><i></i><i></i></div></div></div>`, "tall");
@@ -2006,9 +2212,11 @@ addEventListener("popstate", (e) => {
   if (popAtteso) {                                     // è il ritorno chiesto da closeSheet, non il tasto Indietro
     popAtteso = false;
     if ($("sheet").classList.contains("open")) history.pushState({ sheet: 1 }, "");   // nel frattempo se n'è aperto un altro
+    else if (minoAperto() && !history.state?.mino) history.pushState({ mino: 1 }, "");   // o si è aperto Mino: il suo passo va rimesso
     return;
   }
   if ($("sheet").classList.contains("open")) return closeSheet(true);
+  if (minoAperto()) return minoChiudi();                // il tasto Indietro chiude Mino, e si resta dove si era
   if (!A.sec) return;
   if (A.busy && A.chat) { history.pushState({ v: "chat" }, ""); return toast("Sta rispondendo: aspetta o premi ■"); }
   const v = e.state?.v;
