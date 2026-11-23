@@ -410,7 +410,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.48";
+const VERSIONE = "1.49";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -1980,9 +1980,10 @@ function minoDici(testo) {
 }
 async function minoManda(testo) {
   testo = (testo || "").trim();
-  if (!testo || Mino.vivo) return;
-  window.speechSynthesis?.cancel();
+  if (!testo) return;
   const inp = document.getElementById("minoIn"); if (inp) { inp.value = ""; inp.style.height = ""; }
+  if (Mino.vivo) { Mino.coda = Mino.coda ? Mino.coda + "\n" + testo : testo; return toast("Te la mando appena ho finito"); }   // sta ancora parlando: aspetta il suo turno
+  window.speechSynthesis?.cancel();
   Mino.msgs.push({ chi: "tu", testo, t: Date.now() / 1000, locale: true });
   Mino.vivo = { chi: "mino", testo: "", t: Date.now() / 1000, carte: [], passo: "Ci penso", vivo: true };
   minoDisegna(); document.getElementById("mino")?.classList.add("occupato");
@@ -2002,19 +2003,23 @@ async function minoManda(testo) {
   else Mino.msgs.push({ chi: "mino", testo: "Non ci sono riuscito: " + (errore || "il Mac non risponde") + ".", t: Date.now() / 1000, carte: [], proposte: [testo] });
   minoDisegna();
   if (scritto) MINO_CASA.dopo();
+  minoCoda();
 }
+function minoCoda() { const t = Mino.coda; Mino.coda = ""; if (t) minoManda(t); }
 async function minoCarica() {
   try {
     const r = await MINO_CASA.api("GET", "mino");
     Mino.msgs = r.messaggi; Mino.oggi = r.oggi; Mino.caricato = true; minoDisegna();
-    if (!r.messaggi.some((m) => m.punto === r.oggi)) {            // la prima volta di oggi: il punto della giornata
-      Mino.vivo = { chi: "mino", testo: "", t: Date.now() / 1000, carte: [], passo: "Guardo cosa c'è oggi", vivo: true }; minoDisegna();
-      const p = await MINO_CASA.api("POST", "mino/punto", {}).catch(() => null);
-      Mino.vivo = null;
-      if (p?.messaggi?.length) Mino.msgs.push(...p.messaggi);
-      minoDisegna();
-    }
   } catch (e) { Mino.caricato = true; minoDisegna(); toast(e.message, true); }
+}
+async function minoPunto() {                              // la prima volta di oggi che lo apri senza dire niente
+  if (!Mino.oggi || Mino.vivo || Mino.msgs.some((m) => m.punto === Mino.oggi) || Mino.puntoChiesto === Mino.oggi) return;
+  Mino.puntoChiesto = Mino.oggi;
+  Mino.vivo = { chi: "mino", testo: "", t: Date.now() / 1000, carte: [], passo: "Guardo cosa c'è oggi", vivo: true }; minoDisegna();
+  const p = await MINO_CASA.api("POST", "mino/punto", {}).catch(() => null);
+  Mino.vivo = null;
+  if (p?.messaggi?.length && !Mino.msgs.some((m) => m.punto === Mino.oggi)) Mino.msgs.push(...p.messaggi);
+  minoDisegna(); minoCoda();
 }
 // il microfono: Chrome scrive mentre parli; quando ti fermi (o tocchi di nuovo) la frase parte da sola
 function minoAscolta(suTesto, suFine) {
@@ -2039,8 +2044,8 @@ function minoApri(testo) {
   if (!el.classList.contains("open")) { el.classList.add("open"); document.body.classList.add("mino-aperto"); MINO_CASA.aperto?.(); }
   const dove = MINO_CASA.dove();
   document.getElementById("minoDove").textContent = dove?.nome ? "sei in " + dove.nome : "su tutto il second brain";
-  if (!Mino.caricato) minoCarica().then(() => { if (testo) minoManda(testo); });
-  else { minoDisegna(); if (testo) minoManda(testo); }
+  const poi = () => testo ? minoManda(testo) : minoPunto();
+  if (!Mino.caricato) minoCarica().then(poi); else { minoDisegna(); poi(); }
   if (!testo && !MINO_CASA.tocco) setTimeout(() => document.getElementById("minoIn")?.focus(), 200);
 }
 function minoChiudi() {
