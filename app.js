@@ -409,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.53";
+const VERSIONE = "1.54";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -1902,8 +1902,8 @@ const MINO_CASA = {
   voceAperta: () => { if (!history.state?.voce) history.pushState({ mino: 1, voce: 1 }, ""); },      // un passo anche per la voce: Indietro la chiude
   voceChiudi: () => { if (history.state?.voce) history.back(); else minoVoceChiudi(); },
   aConversazione: () => { minoVoceChiudi(); if (history.state?.voce) history.replaceState({ mino: 1 }, ""); minoApri(); },   // dal nucleo alla conversazione scritta, senza un passo in più
-  audio: async (testo) => {                             // l'audio della frase arriva dal Mac attraverso il ponte, a pezzi
-    const w = await Tunnel.chiama("POST", "mino/voce", { corpo: { testo }, attesa: 90e3 });
+  audio: async (testo, velocita) => {                   // l'audio della frase arriva dal Mac attraverso il ponte, a pezzi
+    const w = await Tunnel.chiama("POST", "mino/voce", { corpo: { testo, velocita }, attesa: 90e3 });
     return w.st >= 400 || w.errore || /json|text/.test(w.ct || "") ? null : new Blob(w.parti.map((x) => unb64(x)), { type: w.ct || "audio/ogg" });
   },
 };
@@ -2093,7 +2093,8 @@ function minoPulsante(b) {
 // nodo acceso pulsa con la voce. Si va a mani libere: parli, lui risponde a voce, e il microfono si riapre da solo.
 // Regola presa da IRIS: UN GIRO ALLA VOLTA. Ogni volta che parte qualcosa di nuovo (ascolto, risposta, chiusura) il giro
 // di prima viene fermato, e non può più né parlare né scrivere sullo schermo (ogni suo passo controlla MV.giro).
-const MV = { giro: 0, stato: "spento", energia: 0, liscia: 0, rot: 0, onde: [], frasi: [], suona: false, finito: true, audio: null, sr: null, kokoro: null, breve: "" };
+const MV_VELOCITA = [1, 1.15, 1.3, 1.45, 1.6];
+const MV = { vel: +localStorage.getItem("mino.vel") || 1.3, giro: 0, stato: "spento", energia: 0, liscia: 0, rot: 0, onde: [], frasi: [], suona: false, finito: true, audio: null, sr: null, kokoro: null, breve: "" };
 const MV_SILENZIO = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 const mvAperto = () => !!document.getElementById("minoParla")?.classList.contains("open");
 const mvEl = (id) => document.getElementById(id);
@@ -2108,7 +2109,7 @@ function mvFerma() {                                      // ferma il giro in co
   try { MV.sr?.abort(); } catch {} MV.sr = null;
   try { MV.audio?.pause(); } catch {}
   window.speechSynthesis?.cancel();
-  MV.frasi = []; MV.suona = false; MV.finito = true; MV.breve = "";
+  MV.frasi = []; MV.suona = false; MV.finito = true; MV.breve = ""; MV.scade = null; MV.finisci = null;
 }
 function minoVoceApri(ascolta, testo) {                  // ascolta: parte già col microfono aperto · testo: una frase già scritta da mandare
   let el = mvEl("minoParla");
@@ -2116,6 +2117,7 @@ function minoVoceApri(ascolta, testo) {                  // ascolta: parte già 
     el = document.createElement("div"); el.id = "minoParla";
     el.innerHTML = `<header><span class="mino-av">${LOGO}</span><span class="mino-chi"><b>Mino</b><small id="mvDove"></small></span>
         <button class="mino-ib mino-voce" id="mvConv" title="Tutta la conversazione, con quello che ho scritto e gli «Annulla»">${svg("chat")}<span>Conversazione</span></button>
+        <button class="mino-ib mino-vel" id="mvVel" title="Quanto parlo svelto: tocca per cambiare"></button>
         <button class="mino-ib" id="mvX" title="Chiudi">${svg("x")}</button></header>
       <div id="mvScena"><button id="mvNucleo" aria-label="Tocca per parlare, o per interrompermi"><canvas></canvas></button>
         <b id="mvEtichetta"></b>
@@ -2126,6 +2128,9 @@ function minoVoceApri(ascolta, testo) {                  // ascolta: parte già 
     el.querySelector("#mvX").onclick = () => (MINO_CASA.voceChiudi || minoVoceChiudi)();
     el.querySelector("#mvConv").onclick = () => MINO_CASA.aConversazione();
     el.querySelector("#mvNucleo").onclick = mvTocco;
+    const vel = el.querySelector("#mvVel"), scrivi = () => { vel.textContent = String(MV.vel).replace(".", ",") + "×"; };
+    vel.onclick = () => { MV.vel = MV_VELOCITA[(MV_VELOCITA.indexOf(MV.vel) + 1) % MV_VELOCITA.length] || 1.3; localStorage.setItem("mino.vel", MV.vel); scrivi(); toast(MV.vel <= 1 ? "Parlo con calma" : MV.vel >= 1.6 ? "Parlo molto svelto" : "Parlo più svelto"); };
+    scrivi();
     const inp = el.querySelector("#mvIn"), manda = () => { const t = inp.value.trim(); if (!t) return; inp.value = ""; inp.style.height = ""; inp.blur(); mvManda(t, false); };
     el.querySelector("#mvForm").onsubmit = (e) => { e.preventDefault(); manda(); };
     inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); manda(); } if (e.key === "Escape") (MINO_CASA.voceChiudi || minoVoceChiudi)(); };
@@ -2184,20 +2189,61 @@ function minoVoceChiudi() {
   if (!minoAperto()) document.body.classList.remove("mino-aperto");
 }
 function mvTocco() {
-  if (MV.stato === "ascolta" && MV.sr) return MV.sr.stop();          // hai finito di parlare: manda quello che ha sentito
+  if (MV.stato === "ascolta" && MV.finisci) return MV.finisci();     // hai finito di parlare: manda subito quello che ha sentito
   mvAscolta();                                                       // a riposo: parla. Mentre pensa o parla: lo interrompi
 }
+// Un ascolto è UNA finestra (come in IRIS). Su Android il riconoscitore si chiude da solo alla prima pausa di chi parla: se ne
+// riapre subito un altro, e quello che ha già capito resta. A decidere che hai finito è un timer nostro: tanto silenzio
+// dopo l'ultima parola. Una pausa più corta (un respiro, un «e poi…») è ancora la stessa frase.
+const MV_FINE_FRASE = 2200;                               // silenzio che vuol dire «ho finito»
+const MV_ATTESA = 9000;                                   // quanto aspetta che cominci a parlare (meno, se il microfono si è riaperto da solo)
 function mvAscolta(daSolo) {
   mvFerma(); const g = MV.giro;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { mvStato("riposo", "Qui il microfono non c'è"); mvEl("mvNota").textContent = "Chiudi e scrivimi: su questo dispositivo non posso ascoltarti."; return; }
-  const r = new SR(); r.lang = "it-IT"; r.continuous = false; r.interimResults = true;
-  let detto = "";
-  r.onresult = (e) => { detto = [...e.results].map((x) => x[0].transcript).join(" ").trim(); if (g === MV.giro) { mvEl("mvTu").textContent = detto; MV.energia = Math.min(1, MV.energia + .45); } };
-  r.onerror = (e) => { if (g === MV.giro && !["aborted", "no-speech"].includes(e.error)) mvEl("mvNota").textContent = e.error === "not-allowed" ? "Non ho il permesso di usare il microfono." : "Il microfono non va (" + e.error + ")."; };
-  r.onend = () => { if (MV.sr === r) MV.sr = null; if (g !== MV.giro) return; detto ? mvManda(detto) : mvStato("riposo", daSolo ? "Tocca per parlare" : "Non ho sentito"); };
-  try { r.start(); MV.sr = r; mvStato("ascolta", "Ti ascolto"); mvEl("mvTu").textContent = ""; mvEl("mvProp").innerHTML = ""; navigator.vibrate?.(10); }
-  catch { mvStato("riposo", "Il microfono non parte"); }
+  if (!SR) { mvStato("riposo", "Qui il microfono non c'è"); mvEl("mvNota").textContent = "Su questo dispositivo non posso ascoltarti: scrivimi qui sotto."; return; }
+  const pezzi = [];                                       // quello che hanno capito i riconoscitori già chiusi
+  let finale = "", parziale = "", fineAl = 0, timer = 0, chiuso = false, riavvii = 0, r = null;
+  const testo = () => [...pezzi, finale, parziale].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  const arma = (ms) => { fineAl = Date.now() + ms; MV.scade = { inizio: Date.now(), durata: ms, parole: !!testo() }; clearTimeout(timer); timer = setTimeout(chiudi, ms); };
+  const chiudi = () => {
+    if (chiuso) return; chiuso = true; clearTimeout(timer);
+    if (g !== MV.giro) return;
+    MV.scade = null; MV.finisci = null;
+    try { r?.abort(); } catch {} MV.sr = null;
+    const t = testo();
+    t ? mvManda(t) : mvStato("riposo", daSolo ? "Tocca per parlare" : "Non ho sentito");
+  };
+  const avvia = () => {
+    const q = new SR(); r = q; MV.sr = q;
+    q.lang = "it-IT"; q.interimResults = true; q.continuous = false;
+    const mio = (f) => (e) => { if (r === q && !chiuso && g === MV.giro) f(e); };
+    q.onspeechstart = mio(() => { if (fineAl - Date.now() < MV_FINE_FRASE) arma(MV_FINE_FRASE); });      // c'è voce: non chiudere adesso
+    q.onresult = mio((e) => {
+      let f = "", p = "";
+      for (const x of e.results) { const t = x[0]?.transcript || ""; if (x.isFinal) f += " " + t; else p += " " + t; }
+      finale = f.trim(); parziale = p.trim();
+      mvEl("mvTu").textContent = testo(); MV.energia = Math.min(1, MV.energia + .45);
+      arma(MV_FINE_FRASE);
+    });
+    q.onerror = mio((e) => {
+      if (!["not-allowed", "service-not-allowed", "audio-capture", "network", "language-not-supported"].includes(e.error)) return;      // «no-speech» e simili: ci pensa onend
+      mvEl("mvNota").textContent = /allowed/.test(e.error) ? "Non ho il permesso di usare il microfono." : e.error === "network" ? "Per ascoltarti serve la rete." : "Il microfono non va (" + e.error + ").";
+      chiuso = true; clearTimeout(timer); MV.scade = null; MV.sr = null; mvStato("riposo", "Tocca per riprovare");
+    });
+    q.onend = () => {
+      if (r !== q) return;
+      const qui = [finale, parziale].filter(Boolean).join(" "); if (qui) pezzi.push(qui);
+      finale = parziale = "";
+      if (chiuso || g !== MV.giro) return;
+      if (Date.now() < fineAl - 150 && riavvii < 30) { riavvii++; try { avvia(); return; } catch {} }      // chiuso dal telefono prima del tempo: si riapre
+      chiudi();
+    };
+    q.start();
+  };
+  mvStato("ascolta", "Ti ascolto"); mvEl("mvTu").textContent = ""; mvEl("mvProp").innerHTML = ""; navigator.vibrate?.(10);
+  MV.finisci = chiudi;
+  arma(daSolo ? 7000 : MV_ATTESA);
+  try { avvia(); } catch { chiuso = true; clearTimeout(timer); MV.scade = null; mvStato("riposo", "Il microfono non parte"); }
 }
 const mvPulito = (t) => t.replace(/\[f:[^\]]*\]/g, "").replace(/[*_`#>|]/g, "").replace(/\s+/g, " ").trim();
 function mvFrase(testo, g) {                              // una frase pronta da dire: l'audio si prepara subito, si suona al suo turno
@@ -2205,7 +2251,7 @@ function mvFrase(testo, g) {                              // una frase pronta da
   if (!testo) return;
   if (testo.length < 28 && !MV.finito) { MV.breve = testo; return; }        // troppo corta da sola: aspetta la prossima
   MV.breve = "";
-  MV.frasi.push({ testo, audio: MV.kokoro ? MINO_CASA.audio(testo).catch(() => null) : Promise.resolve(null) });
+  MV.frasi.push({ testo, audio: MV.kokoro ? MINO_CASA.audio(testo, MV.vel).catch(() => null) : Promise.resolve(null) });
   mvAvanti(g);
 }
 async function mvAvanti(g) {
@@ -2222,7 +2268,7 @@ async function mvAvanti(g) {
     MV.audio.onended = () => { URL.revokeObjectURL(url); poi(); }; MV.audio.onerror = poi;
     MV.audio.src = url; MV.audio.play().catch(poi);
   } else if (window.speechSynthesis) {                    // senza la voce IA: quella del dispositivo
-    const u = new SpeechSynthesisUtterance(f.testo); u.lang = "it-IT"; u.rate = 1.05; u.onend = poi; u.onerror = poi; MV.finta = true;
+    const u = new SpeechSynthesisUtterance(f.testo); u.lang = "it-IT"; u.rate = MV.vel; u.onend = poi; u.onerror = poi; MV.finta = true;
     speechSynthesis.speak(u);
   } else setTimeout(poi, 400 + f.testo.length * 55);
 }
@@ -2275,7 +2321,7 @@ async function mvManda(testo, aVoce = true) {              // aVoce: gliel'hai d
   MV.finito = true;
   if (!aVoce) { mvMostra(fine[1].testo, fine[1].proposte || []); return mvStato("riposo", ""); }
   taglia(true);
-  if (MV.breve) { const b = MV.breve; MV.breve = ""; MV.frasi.push({ testo: b, audio: MV.kokoro ? MINO_CASA.audio(b).catch(() => null) : Promise.resolve(null) }); }
+  if (MV.breve) { const b = MV.breve; MV.breve = ""; MV.frasi.push({ testo: b, audio: MV.kokoro ? MINO_CASA.audio(b, MV.vel).catch(() => null) : Promise.resolve(null) }); }
   mvEl("mvProp").innerHTML = (fine[1].proposte || []).map((p) => `<button data-p="${esc(p)}">${esc(p)}</button>`).join("");
   mvEl("mvProp").querySelectorAll("[data-p]").forEach((b) => b.onclick = () => mvManda(b.dataset.p, true));
   mvAvanti(g);
@@ -2305,6 +2351,12 @@ function mvDisegna(ora) {
   // tre archi che girano al contrario
   g.lineWidth = 2; g.strokeStyle = col(acc, s === "spento" ? .15 : .3 + e * .5 + (s === "riposo" ? respiro * .1 : 0));
   for (let k = 0; k < 3; k++) { const a = -MV.rot * 1.7 + k * Math.PI * 2 / 3; g.beginPath(); g.arc(c, c, R * (1.34 + e * .04), a, a + Math.PI * .42); g.stroke(); }
+  // mentre ascolta: l'arco del tempo che resta prima che consideri finita la frase
+  if (s === "ascolta" && MV.scade) {
+    const resta = Math.max(0, 1 - (Date.now() - MV.scade.inizio) / MV.scade.durata);
+    g.strokeStyle = col(MV.scade.parole ? acc : ink, MV.scade.parole ? .85 : .45); g.lineWidth = 3; g.lineCap = "round";
+    g.beginPath(); g.arc(c, c, R * 1.2, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * resta); g.stroke(); g.lineCap = "butt";
+  }
   // onde quando ascolta
   if (s === "ascolta" && (!MV.onde.length || ora - MV.onde[MV.onde.length - 1] > 620 - e * 300)) MV.onde.push(ora);
   MV.onde = MV.onde.filter((t0) => ora - t0 < 1700);
