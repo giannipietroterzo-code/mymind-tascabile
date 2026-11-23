@@ -409,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.55";
+const VERSIONE = "1.56";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -1976,6 +1976,7 @@ async function minoManda(testo) {
   try {
     await MINO_CASA.flusso({ testo, dove: MINO_CASA.dove() }, (j) => {
       if (j.passo) Mino.vivo.passo = j.passo;
+      if (j.rifai) { Mino.vivo.testo = ""; Mino.vivo.passo = "Lo faccio davvero"; }      // aveva detto «fatto» senza fare: riparte
       if (j.testo) { Mino.vivo.testo += j.testo; Mino.vivo.passo = ""; }
       if (j.carte) { Mino.vivo.carte.push(...j.carte); scritto = scritto || j.carte.some((c) => c.tipo === "op"); }
       if (j.errore) errore = j.errore;
@@ -2314,6 +2315,7 @@ async function mvManda(testo, aVoce = true) {              // aVoce: gliel'hai d
       if (j.errore) errore = j.errore;
       if (j.fine) fine = j.fine.messaggi;
       if (g !== MV.giro) return;
+      if (j.rifai) { tutto = ""; letto = 0; MV.frasi = []; MV.breve = ""; mvEl("mvLui").textContent = ""; }      // riparte: quello che non ha ancora detto non lo dice
       if (j.passo && !tutto) mvStato("pensa", j.passo);
       if (j.testo) { tutto += j.testo; if (aVoce) taglia(false); else { mvStato("parla", "Mino"); MV.energia = Math.min(1, MV.energia + .25); mvMostra(tutto, null, true); } }
       if (j.carte) mvEl("mvCarte").innerHTML += j.carte.filter((c) => c.tipo !== "cosa").map((c) => `<span>${svg(c.tipo === "io" ? "key" : (MINO_OP[c.op] || MINO_OP.nuovo)[0])}${esc(c.tipo === "io" ? "Me lo ricordo" : (MINO_OP[c.op] || MINO_OP.nuovo)[1] + " · " + c.ws_nome)}</span>`).join("");
