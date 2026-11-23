@@ -798,3 +798,23 @@ body.mino-aperto #minoBtn, body:has(.lock) #minoBtn { display: none; }
 #mvCarte span { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 99px; background: var(--ws-soft); color: var(--ws-text); font-size: 12.5px; font-weight: 600; } #mvCarte svg { width: 14px; height: 14px; }
 #mvProp { justify-content: center; margin-top: 2px; }
 #mvNota { margin-top: auto; padding-top: 8px; font-size: 12.5px; color: var(--muted); }
+
+/* ---- il nucleo è la casa di Mino: testata in alto, scena al centro, riga per scrivere in fondo */
+#minoParla { justify-content: flex-start; gap: 0; padding: 0; }
+#minoParla > header { align-self: stretch; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 10px 8px 14px; text-align: left; flex: none; }
+#mvX { position: static; }
+#mvScena { flex: 1; min-height: 0; width: 100%; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 4px 22px 10px; }
+#mvScena > :first-child { margin-top: auto; } #mvScena > :last-child { margin-bottom: auto; }
+#mvNucleo { width: min(64vw, 36vh, 300px); }
+#mvLui { min-height: 2.4em; } #mvLui p { margin: 0 0 8px; } #mvLui p:last-child { margin-bottom: 0; } #mvLui ul, #mvLui ol { text-align: left; margin: 0 0 8px; padding-left: 22px; }
+#mvLui.lungo { font-size: 16px; font-weight: 400; letter-spacing: 0; line-height: 1.5; text-align: left; }
+#mvNota { margin: 0; padding: 4px 16px 8px; flex: none; }
+#mvForm { flex: none; align-self: stretch; display: flex; align-items: flex-end; gap: 6px; margin: 0 12px calc(12px + env(safe-area-inset-bottom)); padding: 6px; border: 1px solid var(--line); border-radius: 22px; background: var(--panel); max-width: 620px; width: calc(100% - 24px); }
+@media (min-width: 700px) { #mvForm { align-self: center; } }
+#mvForm:focus-within { border-color: var(--m-acc); }
+#mvIn { flex: 1; min-width: 0; border: 0; outline: 0; resize: none; background: none; color: var(--text); font: inherit; font-size: 15.5px; line-height: 1.4; padding: 8px 6px 8px 10px; max-height: 120px; text-align: left; }
+#mvForm .manda { background: var(--m-acc); color: var(--m-su); }
+/* sul telefono: il pulsante di Mino dice chi è */
+#minoBtn { width: auto; height: 52px; padding: 5px 16px 5px 5px; display: flex; align-items: center; gap: 9px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); color: var(--text); }
+#minoBtn svg { width: 42px; height: 42px; flex: none; border-radius: 50%; } #minoBtn b { font-size: 15px; font-weight: 600; letter-spacing: -.01em; pointer-events: none; }
+#minoBtn.on { box-shadow: 0 8px 24px rgba(0, 0, 0, .28); }

@@ -409,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.51";
+const VERSIONE = "1.52";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -581,7 +581,7 @@ function casa() {
     <footer class="foot-home">${svg("key")}Cifrato dal telefono al Mac · ${esc(A.sec?.nome || "")}</footer></div>`;
   dipingiStato();
   $("app").querySelectorAll("[data-ws]").forEach((b) => b.onclick = () => apriWs(b.dataset.ws));
-  $("askall").onsubmit = (e) => { e.preventDefault(); const q = $("askq").value.trim(); if (!q) return; $("askq").value = ""; $("askq").blur(); minoApri(q); };
+  $("askall").onsubmit = (e) => { e.preventDefault(); const q = $("askq").value.trim(); if (!q) return; $("askq").value = ""; $("askq").blur(); minoVoceApri(false, q); };
   minoBottone();
   $("menu").onclick = menu;
   $("annota").onclick = (e) => annotaSheet({ detta: !!e.target.closest("#annotaMic") });   // sul microfono: parte già in ascolto
@@ -1901,6 +1901,7 @@ const MINO_CASA = {
   chiudi: () => { if (history.state?.mino) history.back(); else minoChiudi(); },
   voceAperta: () => { if (!history.state?.voce) history.pushState({ mino: 1, voce: 1 }, ""); },      // un passo anche per la voce: Indietro la chiude
   voceChiudi: () => { if (history.state?.voce) history.back(); else minoVoceChiudi(); },
+  aConversazione: () => { minoVoceChiudi(); if (history.state?.voce) history.replaceState({ mino: 1 }, ""); minoApri(); },   // dal nucleo alla conversazione scritta, senza un passo in più
   audio: async (testo) => {                             // l'audio della frase arriva dal Mac attraverso il ponte, a pezzi
     const w = await Tunnel.chiama("POST", "mino/voce", { corpo: { testo }, attesa: 90e3 });
     return w.st >= 400 || w.errore || /json|text/.test(w.ct || "") ? null : new Blob(w.parti.map((x) => unb64(x)), { type: w.ct || "audio/ogg" });
@@ -1908,7 +1909,7 @@ const MINO_CASA = {
 };
 function minoBottone() {                                  // compare dopo lo sblocco, sparisce al blocco
   if ($("minoBtn") || !A.sec) return;
-  const b = document.createElement("button"); b.id = "minoBtn"; b.setAttribute("aria-label", "Mino"); b.innerHTML = LOGO;
+  const b = document.createElement("button"); b.id = "minoBtn"; b.setAttribute("aria-label", "Mino"); b.innerHTML = LOGO + "<b>Mino</b>";
   document.body.appendChild(b); minoPulsante(b);
 }
 function minoVia() { if (mvAperto()) minoVoceChiudi(); $("minoParla")?.remove(); $("minoBtn")?.remove(); $("mino")?.remove(); document.body.classList.remove("mino-aperto"); Object.assign(Mino, { msgs: [], vivo: null, caricato: false }); }
@@ -2054,7 +2055,7 @@ function minoMonta() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const el = document.createElement("div"); el.id = "mino";
   el.innerHTML = `<header><span class="mino-av">${LOGO}</span><span class="mino-chi"><b>Mino</b><small id="minoDove"></small></span>
-      <button class="mino-ib mino-voce" id="minoVoce" title="Parliamo a voce">${svg("volume")}<span>A voce</span></button>
+      <button class="mino-ib mino-voce" id="minoVoce" title="Torna al nucleo: parlami o scrivimi lì">${svg("volume")}<span>Parlami</span></button>
       <button class="mino-ib" id="minoMenuB" title="Cosa so di te · cambiamo discorso">${svg("dots")}</button>
       <button class="mino-ib" id="minoX" title="Chiudi">${svg("x")}</button></header>
     <div id="minoCorpo"></div>
@@ -2070,11 +2071,11 @@ function minoMonta() {
   el.querySelector("#minoVoce").onclick = () => minoVoceApri();
   if (SR) el.querySelector("#minoMic").onclick = minoMic;
 }
-// il pulsante di Mino: un tocco lo apre per scrivere; tenuto premuto apre la schermata a voce, già in ascolto
+// il pulsante di Mino: un tocco apre la sua schermata (il nucleo); tenuto premuto la apre già in ascolto
 function minoPulsante(b) {
   let timer = 0;
-  b.addEventListener("pointerdown", (e) => { if (e.button) return; timer = setTimeout(() => { timer = 0; navigator.vibrate?.(15); minoVoceApri(); }, 380); });
-  b.addEventListener("pointerup", () => { if (!timer) return; clearTimeout(timer); timer = 0; minoAperto() ? MINO_CASA.chiudi() : MINO_CASA.apri(); });
+  b.addEventListener("pointerdown", (e) => { if (e.button) return; timer = setTimeout(() => { timer = 0; navigator.vibrate?.(15); minoVoceApri(true); }, 380); });
+  b.addEventListener("pointerup", () => { if (!timer) return; clearTimeout(timer); timer = 0; mvAperto() ? (MINO_CASA.voceChiudi || minoVoceChiudi)() : minoAperto() ? MINO_CASA.chiudi() : minoVoceApri(); });
   b.addEventListener("pointercancel", () => { clearTimeout(timer); timer = 0; });
   b.addEventListener("contextmenu", (e) => e.preventDefault());
 }
@@ -2102,39 +2103,77 @@ function mvFerma() {                                      // ferma il giro in co
   window.speechSynthesis?.cancel();
   MV.frasi = []; MV.suona = false; MV.finito = true; MV.breve = "";
 }
-function minoVoceApri() {
-  minoApri();                                             // sotto resta la conversazione scritta: chiudendo la voce la ritrovi lì
+function minoVoceApri(ascolta, testo) {                  // ascolta: parte già col microfono aperto · testo: una frase già scritta da mandare
   let el = mvEl("minoParla");
   if (!el) {
     el = document.createElement("div"); el.id = "minoParla";
-    el.innerHTML = `<button class="mino-ib" id="mvX" title="Chiudi">${svg("x")}</button>
-      <button id="mvNucleo" aria-label="Tocca per parlare, o per interrompermi"><canvas></canvas></button>
-      <b id="mvEtichetta"></b>
-      <p id="mvTu"></p><div id="mvLui"></div><div id="mvCarte"></div><div class="mino-prop" id="mvProp"></div>
-      <small id="mvNota">Tocca il nucleo per parlare, o per interrompermi.</small>`;
+    el.innerHTML = `<header><span class="mino-av">${LOGO}</span><span class="mino-chi"><b>Mino</b><small id="mvDove"></small></span>
+        <button class="mino-ib mino-voce" id="mvConv" title="Tutta la conversazione, con quello che ho scritto e gli «Annulla»">${svg("chat")}<span>Conversazione</span></button>
+        <button class="mino-ib" id="mvX" title="Chiudi">${svg("x")}</button></header>
+      <div id="mvScena"><button id="mvNucleo" aria-label="Tocca per parlare, o per interrompermi"><canvas></canvas></button>
+        <b id="mvEtichetta"></b>
+        <p id="mvTu"></p><div id="mvLui" class="md"></div><div id="mvCarte"></div><div class="mino-prop" id="mvProp"></div></div>
+      <small id="mvNota"></small>
+      <form id="mvForm"><textarea id="mvIn" rows="1" placeholder="…oppure scrivimi" enterkeyhint="send"></textarea><button class="mino-ib manda" title="Manda">${svg("up")}</button></form>`;
     document.body.appendChild(el);
     el.querySelector("#mvX").onclick = () => (MINO_CASA.voceChiudi || minoVoceChiudi)();
+    el.querySelector("#mvConv").onclick = () => MINO_CASA.aConversazione();
     el.querySelector("#mvNucleo").onclick = mvTocco;
+    const inp = el.querySelector("#mvIn"), manda = () => { const t = inp.value.trim(); if (!t) return; inp.value = ""; inp.style.height = ""; inp.blur(); mvManda(t, false); };
+    el.querySelector("#mvForm").onsubmit = (e) => { e.preventDefault(); manda(); };
+    inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); manda(); } if (e.key === "Escape") (MINO_CASA.voceChiudi || minoVoceChiudi)(); };
+    inp.oninput = () => { inp.style.height = ""; inp.style.height = Math.min(inp.scrollHeight, 120) + "px"; };
   }
-  if (el.classList.contains("open")) return;
-  el.classList.add("open"); MINO_CASA.voceAperta?.();
-  for (const id of ["mvTu", "mvLui", "mvCarte", "mvProp"]) mvEl(id).innerHTML = "";
-  // l'audio va sbloccato dentro il tocco che ha aperto la schermata, altrimenti il telefono non lo lascia suonare dopo
-  MV.audio = MV.audio || new Audio();
-  try { MV.audio.src = MV_SILENZIO; MV.audio.play().catch(() => {}); } catch {}
-  try {
-    MV.ctx = MV.ctx || new (window.AudioContext || window.webkitAudioContext)(); MV.ctx.resume();
-    if (!MV.an) { const fonte = MV.ctx.createMediaElementSource(MV.audio); MV.an = MV.ctx.createAnalyser(); MV.an.fftSize = 256; fonte.connect(MV.an); MV.an.connect(MV.ctx.destination); MV.onda = new Uint8Array(MV.an.fftSize); }
-  } catch {}
-  if (MV.kokoro === null) MINO_CASA.api("GET", "mino/voce").then((r) => { MV.kokoro = !!r.disponibile; }).catch(() => { MV.kokoro = false; });
-  const cs = getComputedStyle(el); MV.acc = cs.getPropertyValue("--m-acc").trim() || "#f5c518"; MV.ink = cs.getPropertyValue("--muted").trim() || "#a9a59b";
-  requestAnimationFrame(mvDisegna);
-  mvAscolta();
+  const gia = el.classList.contains("open");
+  if (!gia) {
+    if (minoAperto()) minoChiudi();
+    el.classList.add("open"); document.body.classList.add("mino-aperto"); MINO_CASA.voceAperta?.();
+    for (const id of ["mvTu", "mvLui", "mvCarte", "mvProp"]) mvEl(id).innerHTML = "";
+    const dove = MINO_CASA.dove(); mvEl("mvDove").textContent = dove?.nome ? "sei in " + dove.nome : "su tutto il second brain";
+    mvEl("mvNota").textContent = (window.SpeechRecognition || window.webkitSpeechRecognition) ? "Tocca il nucleo per parlare, o per interrompermi." : "Su questo dispositivo non posso ascoltarti: scrivimi qui sotto.";
+    // l'audio va sbloccato dentro il tocco che ha aperto la schermata, altrimenti il telefono non lo lascia suonare dopo
+    MV.audio = MV.audio || new Audio();
+    try { MV.audio.src = MV_SILENZIO; MV.audio.play().catch(() => {}); } catch {}
+    try {
+      MV.ctx = MV.ctx || new (window.AudioContext || window.webkitAudioContext)(); MV.ctx.resume();
+      if (!MV.an) { const fonte = MV.ctx.createMediaElementSource(MV.audio); MV.an = MV.ctx.createAnalyser(); MV.an.fftSize = 256; fonte.connect(MV.an); MV.an.connect(MV.ctx.destination); MV.onda = new Uint8Array(MV.an.fftSize); }
+    } catch {}
+    if (MV.kokoro === null) MINO_CASA.api("GET", "mino/voce").then((r) => { MV.kokoro = !!r.disponibile; }).catch(() => { MV.kokoro = false; });
+    const cs = getComputedStyle(el); MV.acc = cs.getPropertyValue("--m-acc").trim() || "#f5c518"; MV.ink = cs.getPropertyValue("--muted").trim() || "#a9a59b";
+    mvStato("riposo", "");
+    requestAnimationFrame(mvDisegna);
+  }
+  if (testo) return mvManda(testo, false);
+  if (ascolta) return mvAscolta();
+  if (!gia) mvBenvenuto();
+}
+async function mvBenvenuto() {                            // appena aperto: il punto di oggi (la prima volta), o da dove eravate rimasti
+  const g = MV.giro;
+  if (!Mino.caricato) await minoCarica();
+  if (g !== MV.giro || !mvAperto()) return;
+  let m = Mino.msgs.find((x) => x.punto === Mino.oggi);
+  if (!m && Mino.oggi && Mino.puntoChiesto !== Mino.oggi) {
+    Mino.puntoChiesto = Mino.oggi; mvStato("pensa", "Guardo cosa c'è oggi");
+    const p = await MINO_CASA.api("POST", "mino/punto", {}).catch(() => null);
+    if (p?.messaggi?.length && !Mino.msgs.some((x) => x.punto === Mino.oggi)) Mino.msgs.push(...p.messaggi);
+    if (g !== MV.giro || !mvAperto()) return;
+    m = Mino.msgs.find((x) => x.punto === Mino.oggi);
+  } else m = [...Mino.msgs].reverse().find((x) => x.chi === "mino") || m;
+  mvStato("riposo", m?.punto ? "Il punto di oggi" : "");
+  if (m) mvMostra(m.testo, m.proposte); else mvEl("mvLui").innerHTML = `<p>Sono Mino. Dimmi una cosa e la annoto, chiedimi una cosa e la cerco, oppure ragioniamo insieme.</p>`;
+}
+function mvMostra(testo, proposte, vivo) {                 // una risposta scritta sullo schermo, coi fatti che si toccano
+  const el = mvEl("mvLui"); el.innerHTML = minoTesto(testo, vivo); el.classList.toggle("lungo", testo.length > 170);
+  el.querySelectorAll("[data-mf]").forEach((b) => b.onclick = () => MINO_CASA.fatto(b.dataset.mf, b.dataset.mw));
+  if (proposte) {
+    mvEl("mvProp").innerHTML = proposte.map((p) => `<button data-p="${esc(p)}">${esc(p)}</button>`).join("");
+    mvEl("mvProp").querySelectorAll("[data-p]").forEach((b) => b.onclick = () => mvManda(b.dataset.p, false));
+  }
 }
 function minoVoceChiudi() {
   mvFerma(); mvStato("spento", "");
   mvEl("minoParla")?.classList.remove("open");
-  minoDisegna();
+  if (!minoAperto()) document.body.classList.remove("mino-aperto");
 }
 function mvTocco() {
   if (MV.stato === "ascolta" && MV.sr) return MV.sr.stop();          // hai finito di parlare: manda quello che ha sentito
@@ -2183,9 +2222,9 @@ function mvDopo(g) {                                       // ha finito di parla
   MV.finta = false; mvStato("riposo", "");
   setTimeout(() => { if (g === MV.giro && mvAperto()) mvAscolta(true); }, 380);
 }
-async function mvManda(testo) {
+async function mvManda(testo, aVoce = true) {              // aVoce: gliel'hai detto a voce, quindi risponde a voce; scritto → risponde scritto
   mvFerma(); const g = MV.giro;
-  mvStato("pensa", "Ci penso"); mvEl("mvTu").textContent = testo;
+  mvStato("pensa", "Ci penso"); mvEl("mvTu").textContent = testo; mvEl("mvLui").classList.remove("lungo");
   for (const id of ["mvLui", "mvCarte", "mvProp"]) mvEl(id).innerHTML = "";
   const mio = { chi: "tu", testo, t: Date.now() / 1000, locale: true };
   Mino.msgs.push(mio);
@@ -2212,12 +2251,12 @@ async function mvManda(testo) {
     letto += fin;
   };
   try {
-    await MINO_CASA.flusso({ testo, dove: MINO_CASA.dove(), voce: true }, (j) => {
+    await MINO_CASA.flusso({ testo, dove: MINO_CASA.dove(), voce: aVoce }, (j) => {
       if (j.errore) errore = j.errore;
       if (j.fine) fine = j.fine.messaggi;
       if (g !== MV.giro) return;
       if (j.passo && !tutto) mvStato("pensa", j.passo);
-      if (j.testo) { tutto += j.testo; taglia(false); }
+      if (j.testo) { tutto += j.testo; if (aVoce) taglia(false); else { mvStato("parla", "Mino"); MV.energia = Math.min(1, MV.energia + .25); mvMostra(tutto, null, true); } }
       if (j.carte) mvEl("mvCarte").innerHTML += j.carte.filter((c) => c.tipo !== "cosa").map((c) => `<span>${svg(c.tipo === "io" ? "key" : (MINO_OP[c.op] || MINO_OP.nuovo)[0])}${esc(c.tipo === "io" ? "Me lo ricordo" : (MINO_OP[c.op] || MINO_OP.nuovo)[1] + " · " + c.ws_nome)}</span>`).join("");
     });
   } catch (e) { errore = errore || e.message; }
@@ -2225,10 +2264,12 @@ async function mvManda(testo) {
   if (fine) { if (i >= 0) Mino.msgs.splice(i, 1); Mino.msgs.push(...fine); if (fine[1].carte.some((c) => c.tipo === "op")) MINO_CASA.dopo(); }
   if (g !== MV.giro) return;
   if (!fine) { MV.finito = true; mvStato("riposo", "Non ci sono riuscito"); mvEl("mvNota").textContent = errore || "Il Mac non risponde."; return; }
-  MV.finito = true; taglia(true);
+  MV.finito = true;
+  if (!aVoce) { mvMostra(fine[1].testo, fine[1].proposte || []); return mvStato("riposo", ""); }
+  taglia(true);
   if (MV.breve) { const b = MV.breve; MV.breve = ""; MV.frasi.push({ testo: b, audio: MV.kokoro ? MINO_CASA.audio(b).catch(() => null) : Promise.resolve(null) }); }
   mvEl("mvProp").innerHTML = (fine[1].proposte || []).map((p) => `<button data-p="${esc(p)}">${esc(p)}</button>`).join("");
-  mvEl("mvProp").querySelectorAll("[data-p]").forEach((b) => b.onclick = () => mvManda(b.dataset.p));
+  mvEl("mvProp").querySelectorAll("[data-p]").forEach((b) => b.onclick = () => mvManda(b.dataset.p, true));
   mvAvanti(g);
 }
 // il nucleo: la costellazione dentro due anelli a tacche. Cambia con lo stato, e l'energia (voce, parole sentite) lo muove.
