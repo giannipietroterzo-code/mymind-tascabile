@@ -764,9 +764,6 @@ details.web-altri .lista { display: flex; flex-wrap: wrap; gap: 8px; }
 #minoForm .manda { background: var(--m-acc); color: var(--m-su); } #mino.occupato #minoForm .manda { opacity: .4; pointer-events: none; }
 #minoForm .mic.on { background: var(--bad); color: #fff; animation: mino-batte 1.2s infinite; }
 @keyframes mino-batte { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--bad) 22%, transparent); } }
-.mino-ascolto { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 30px; text-align: center; background: color-mix(in srgb, var(--bg) 93%, transparent); backdrop-filter: blur(6px); }
-.mino-ascolto b { font-size: 20px; font-weight: 600; } .mino-ascolto p { margin: 0; font-size: 18px; line-height: 1.45; min-height: 3em; max-width: 420px; } .mino-ascolto small { color: var(--muted); }
-.mino-ascolto .mino-av { animation: mino-batte 1.2s infinite; border-radius: 16px; }
 
 /* il pulsante di Mino: sempre lì, in basso a destra; si alza quando sotto c'è la riga per scrivere */
 #minoBtn { position: fixed; right: 14px; bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 11; width: 58px; height: 58px; padding: 0; border: 0; border-radius: 19px; background: none;
@@ -777,3 +774,27 @@ body:has(#composer > *) #minoBtn { bottom: calc(96px + env(safe-area-inset-botto
 body.mino-aperto #minoBtn, body:has(.lock) #minoBtn { display: none; }
 .askall .mino-av { width: 30px; height: 30px; margin-left: 2px; }
 [data-stile="tech"] :is(.mino-c, #minoForm) { border-radius: 10px; } [data-stile="tech"] #minoBtn { border-radius: 14px; }
+
+.welcome .al-lavoro { margin: -4px 0 4px; color: var(--muted); font-size: 13.5px; line-height: 1.4; text-align: center; max-width: 300px; }
+
+
+/* ---- Mino a voce: il nucleo al centro, le parole sotto */
+.mino-ib.mino-voce { width: auto; padding: 0 12px 0 10px; display: flex; gap: 6px; font: inherit; font-size: 13px; font-weight: 600; color: var(--ws-text); background: var(--ws-soft); }
+#minoParla { --m-acc: var(--acc); --m-su: var(--on-acc); position: fixed; inset: 0; z-index: 13; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: calc(18px + env(safe-area-inset-top)) 22px calc(22px + env(safe-area-inset-bottom)); text-align: center; color: var(--text);
+  background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--m-acc) 9%, var(--bg)), var(--bg) 62%); }
+#minoParla.open { display: flex; animation: mv-entra .25s ease-out; }
+@keyframes mv-entra { from { opacity: 0; transform: scale(1.03); } }
+#mvX { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 12px; }
+#mvNucleo { width: min(74vw, 46vh, 340px); aspect-ratio: 1; padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; flex: none; -webkit-tap-highlight-color: transparent; }
+#mvNucleo canvas { width: 100%; height: 100%; display: block; }
+#mvNucleo:active { transform: scale(.98); }
+#mvEtichetta { min-height: 1.3em; font-size: 12.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--m-acc); }
+#minoParla[data-stato="riposo"] #mvEtichetta { color: var(--muted); }
+#mvTu { margin: 6px 0 0; min-height: 1.4em; max-width: 520px; font-size: 14.5px; line-height: 1.4; color: var(--muted); }
+#mvTu:not(:empty)::before { content: "«"; } #mvTu:not(:empty)::after { content: "»"; }
+#mvLui { min-height: 3.2em; max-width: 560px; font-size: 20px; line-height: 1.42; font-weight: 500; letter-spacing: -.01em; }
+#mvCarte { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+#mvCarte span { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 99px; background: var(--ws-soft); color: var(--ws-text); font-size: 12.5px; font-weight: 600; } #mvCarte svg { width: 14px; height: 14px; }
+#mvProp { justify-content: center; margin-top: 2px; }
+#mvNota { margin-top: auto; padding-top: 8px; font-size: 12.5px; color: var(--muted); }
