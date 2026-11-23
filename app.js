@@ -401,7 +401,6 @@ function lineDiff(a, b) {
 // ================================================================ stato
 const SPECIALI = {
   _libera: { id: "_libera", nome: "Chat libera", colore: "#c2a878", icona: "chat", sotto: "Senza fonti, domande al volo" },
-  _tutti: { id: "_tutti", nome: "Tutti i workspace", colore: "#8c7449", icona: "layers", sotto: "Una domanda su tutto" },
 };
 const COLORI_FORNITORE = { Anthropic: "#c15f3c", Google: "#188038", Mistral: "#d98e04", DeepSeek: "#4d6bfe" };
 const TIPO_IC = { pdf: "pdf", foto: "image", documento: "doc", testo: "file", altro: "file" };
@@ -410,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.49";
+const VERSIONE = "1.50";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -444,7 +443,6 @@ const A = {
 };
 const ws = () => A.wss.find((w) => w.id === A.wid) || SPECIALI[A.wid] || SPECIALI._libera;
 const isSpecial = () => !!SPECIALI[A.wid];
-const isTutti = () => A.wid === "_tutti";
 const minfo = (name) => A.modelli.find((m) => m.name === name);
 const shortName = (name) => minfo(name)?.nome || String(name || "").split("/")[1] || "Modello";
 const pc = (name) => { const c = COLORI_FORNITORE[minfo(name)?.fornitore]; return c ? ` style="--pc:${c}"` : ""; };
@@ -1206,8 +1204,7 @@ async function cestinoSheet() {
 
 // ================================================================ chat: elenco
 function disegnaChats() {
-  const sugg = isTutti() ? ["Cosa scade nei prossimi tre mesi?", "Cosa ho annotato questa settimana?", "Quali cose da fare sono rimaste aperte?"]
-    : isSpecial() ? ["Spiegami una cosa in due righe", "Aiutami a scrivere un messaggio", "Traduci in inglese"]
+  const sugg = isSpecial() ? ["Spiegami una cosa in due righe", "Aiutami a scrivere un messaggio", "Traduci in inglese"]
     : ["Riassumi la nota", "Cosa c'è da fare adesso?", "Annota: ", "Cerca nelle fonti…"];
   $("corpo").innerHTML = `<div class="chats">
     <div class="welcome">${tile(ws())}<h2>${isSpecial() ? esc(ws().nome) : `Cosa ti serve su «${esc(ws().nome)}»?`}</h2>
@@ -1253,7 +1250,7 @@ function msgHtml(m, i) {
   const { usati, altri } = live ? { usati: m.web || [], altri: [] } : webUsati(m);
   const web = usati.map(LINK).join("") + (altri.length ? `<details class="web-altri"><summary>${svg("globe")}${altri.length} ${altri.length === 1 ? "risultato" : "risultati"} del web non usati</summary><div class="lista">${altri.map(LINK).join("")}</div></details>` : "");
   const st = m.stats, costo = st?.costo ? ` · ${st.costo < 0.01 ? "<1 cent" : fmt(st.costo * 100, 1) + " cent"}` : "";
-  const tags = [m.fonti?.length || m.nota ? `${m.fonti?.length || 0} fonti${m.nota ? " + nota" : ""}` : "", m.noteWs?.length ? `${m.noteWs.length} note` : "", m.usaWeb ? "web" : ""].filter(Boolean).join(" · ");
+  const tags = [m.fonti?.length || m.nota ? `${m.fonti?.length || 0} fonti${m.nota ? " + nota" : ""}` : "", m.usaWeb ? "web" : ""].filter(Boolean).join(" · ");
   return `<div class="msg b${live ? " live" : ""}" data-i="${i}">
     <div class="who"><span class="av"${pc(m.model)}>${svg("cloud")}</span><b>${esc(shortName(m.model))}</b>${tags ? `<small>${tags}</small>` : ""}</div>
     <div class="md">${body}</div>${web ? `<div class="wsrcs">${web}</div>` : ""}${notaAutoHtml(m, i)}${m.rimandi?.length && !live ? `<div class="rimandi">${m.rimandi.map((r) => `<button data-sapere="${esc(r.x)}" style="--c:${esc(r.colore || "#999")}"><i></i><span><b>C'entra con «${esc(r.nome)}»</b>${esc(r.perche)}</span>${svg("right")}</button>`).join("")}</div>` : ""}
@@ -1397,18 +1394,6 @@ async function genera(chat, freshImages) {
       + "Se le fonti non bastano dillo chiaramente, poi rispondi con quello che sai distinguendo ciò che viene dalle fonti da ciò che è conoscenza generale. "
       + "Non inventare numeri, date o nomi." + (wantWeb ? " Se ti servono informazioni dal web hai lo strumento cerca_web: usalo solo quando serve davvero (prezzi, schede tecniche, manuali, notizie), scrivi tu una ricerca breve e precisa, e cita con un link Markdown le pagine che usi." : "");
     const users = chat.messages.filter((m) => m.role === "user").slice(-2).map((m) => m.content);
-    if (isTutti()) {
-      reply.phase = "cerco in tutti i workspace…"; ridisegna();
-      const ctx = await api("POST", "tutti/contesto", { domanda: users.join("\n"), k: 6, nota_max: 80000 });
-      reply.fonti = ctx.estratti.map((e) => ({ ws: e.ws, ws_nome: e.ws_nome, fonte: e.fonte, nome: e.nome, pagina: e.pagina, tipo: e.tipo, testo: e.testo.slice(0, 600) }));
-      reply.noteWs = ctx.note.map((n) => ({ ws: n.ws, nome: n.nome }));
-      system += `\n\nSei MyMind e qui guardi insieme tutti i workspace dell'utente: ${ctx.workspace.map((x) => `«${x.nome}» (${x.fonti} fonti)`).join(", ")}.`;
-      if (ctx.note.length) system += "\n\n## Note dei workspace (memoria di lungo periodo, ognuna completa)\n" + ctx.note.map((n) => `### ${n.nome}\n${n.testo}`).join("\n\n");
-      const fuori = ctx.workspace.filter((x) => !ctx.note.some((n) => n.ws === x.id)).length;
-      if (ctx.estratti.length) system += "\n\n## Estratti dalle fonti\n" + ctx.estratti.map((e, k) => `[${k + 1}] workspace «${e.ws_nome}» · ${e.nome}${e.pagina ? `, pag. ${e.pagina}` : ""}\n${e.testo}`).join("\n\n");
-      if (fuori) system += `\n\n(${fuori} note non entrano intere: di quelle vedi solo i pezzi pertinenti tra gli estratti.)`;
-      system += rules + " Per ogni informazione di' da quale workspace viene; se la domanda riguarda date o scadenze, mettile in ordine di tempo rispetto a oggi.";
-    }
     const tools = !isSpecial() && info?.strumenti !== false;
     if (tools) system += `\n\nPuoi usare gli strumenti sui file del workspace «${w.nome}»: elenca_fonti, leggi_fonte (testo intero), cerca_fonti; `
       + "e puoi PROPORRE crea_documento, modifica_documento (solo testi .md .txt .csv), rinomina_fonte, rimuovi_fonte. "
@@ -1503,7 +1488,7 @@ async function genera(chat, freshImages) {
   delete reply.phase;
   A.busy = false; A.ctrl = null; chat.updated = Date.now();
   if (notaAutoOn(model) && wid === A.wid && !reply.error && reply.content.trim() && !reply.content.endsWith("*(interrotta)*")) autoNota(chat, reply, wid);
-  if (!reply.error && reply.content.trim() && !reply.content.endsWith("*(interrotta)*") && wid !== "_tutti") cercaRimandi(chat, reply, wid);
+  if (!reply.error && reply.content.trim() && !reply.content.endsWith("*(interrotta)*")) cercaRimandi(chat, reply, wid);
   salvaChat(chat, wid);
   if (A.chat === chat) { disegnaThread(); disegnaComposer(); }
   navigator.vibrate?.(12);
