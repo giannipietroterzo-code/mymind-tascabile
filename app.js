@@ -409,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.52";
+const VERSIONE = "1.53";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -2026,7 +2026,7 @@ function minoMic() {
 function minoApri(testo) {
   if (!document.getElementById("mino")) minoMonta();
   const el = document.getElementById("mino");
-  if (!el.classList.contains("open")) { el.classList.add("open"); document.body.classList.add("mino-aperto"); MINO_CASA.aperto?.(); }
+  if (!el.classList.contains("open")) { el.classList.add("open", "appena"); setTimeout(() => el.classList.remove("appena"), 700); document.body.classList.add("mino-aperto"); MINO_CASA.aperto?.(); }
   const dove = MINO_CASA.dove();
   document.getElementById("minoDove").textContent = dove?.nome ? "sei in " + dove.nome : "su tutto il second brain";
   const poi = () => testo ? minoManda(testo) : minoPunto();
@@ -2073,10 +2073,17 @@ function minoMonta() {
 }
 // il pulsante di Mino: un tocco apre la sua schermata (il nucleo); tenuto premuto la apre già in ascolto
 function minoPulsante(b) {
-  let timer = 0;
-  b.addEventListener("pointerdown", (e) => { if (e.button) return; timer = setTimeout(() => { timer = 0; navigator.vibrate?.(15); minoVoceApri(true); }, 380); });
-  b.addEventListener("pointerup", () => { if (!timer) return; clearTimeout(timer); timer = 0; mvAperto() ? (MINO_CASA.voceChiudi || minoVoceChiudi)() : minoAperto() ? MINO_CASA.chiudi() : minoVoceApri(); });
+  // Si apre sul «click», non quando alzi il dito: altrimenti il click che il telefono manda subito dopo finisce su quello che
+  // è comparso sotto il dito (la riga per scrivere), e si apre la tastiera.
+  let timer = 0, lungo = false;
+  b.addEventListener("pointerdown", (e) => { if (e.button) return; lungo = false; timer = setTimeout(() => { timer = 0; lungo = true; navigator.vibrate?.(15); minoVoceApri(true); }, 380); });
+  b.addEventListener("pointerup", () => { clearTimeout(timer); timer = 0; });
   b.addEventListener("pointercancel", () => { clearTimeout(timer); timer = 0; });
+  b.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (lungo) { lungo = false; return; }                // era una pressione lunga: ha già aperto in ascolto
+    mvAperto() ? (MINO_CASA.voceChiudi || minoVoceChiudi)() : minoAperto() ? MINO_CASA.chiudi() : minoVoceApri();
+  });
   b.addEventListener("contextmenu", (e) => e.preventDefault());
 }
 
@@ -2127,7 +2134,8 @@ function minoVoceApri(ascolta, testo) {                  // ascolta: parte già 
   const gia = el.classList.contains("open");
   if (!gia) {
     if (minoAperto()) minoChiudi();
-    el.classList.add("open"); document.body.classList.add("mino-aperto"); MINO_CASA.voceAperta?.();
+    el.classList.add("open", "appena"); setTimeout(() => el.classList.remove("appena"), 700); document.activeElement?.blur?.();
+    document.body.classList.add("mino-aperto"); MINO_CASA.voceAperta?.();
     for (const id of ["mvTu", "mvLui", "mvCarte", "mvProp"]) mvEl(id).innerHTML = "";
     const dove = MINO_CASA.dove(); mvEl("mvDove").textContent = dove?.nome ? "sei in " + dove.nome : "su tutto il second brain";
     mvEl("mvNota").textContent = (window.SpeechRecognition || window.webkitSpeechRecognition) ? "Tocca il nucleo per parlare, o per interrompermi." : "Su questo dispositivo non posso ascoltarti: scrivimi qui sotto.";

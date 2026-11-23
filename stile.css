@@ -818,3 +818,4 @@ body.mino-aperto #minoBtn, body:has(.lock) #minoBtn { display: none; }
 #minoBtn { width: auto; height: 52px; padding: 5px 16px 5px 5px; display: flex; align-items: center; gap: 9px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); color: var(--text); }
 #minoBtn svg { width: 42px; height: 42px; flex: none; border-radius: 50%; } #minoBtn b { font-size: 15px; font-weight: 600; letter-spacing: -.01em; pointer-events: none; }
 #minoBtn.on { box-shadow: 0 8px 24px rgba(0, 0, 0, .28); }
+#minoParla.appena #mvForm, #mino.appena #minoForm { pointer-events: none; }
