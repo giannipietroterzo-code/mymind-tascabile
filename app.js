@@ -409,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.54";
+const VERSIONE = "1.55";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -2093,8 +2093,8 @@ function minoPulsante(b) {
 // nodo acceso pulsa con la voce. Si va a mani libere: parli, lui risponde a voce, e il microfono si riapre da solo.
 // Regola presa da IRIS: UN GIRO ALLA VOLTA. Ogni volta che parte qualcosa di nuovo (ascolto, risposta, chiusura) il giro
 // di prima viene fermato, e non può più né parlare né scrivere sullo schermo (ogni suo passo controlla MV.giro).
-const MV_VELOCITA = [1, 1.15, 1.3, 1.45, 1.6];
-const MV = { vel: +localStorage.getItem("mino.vel") || 1.3, giro: 0, stato: "spento", energia: 0, liscia: 0, rot: 0, onde: [], frasi: [], suona: false, finito: true, audio: null, sr: null, kokoro: null, breve: "" };
+const MV_VELOCITA = [1, 1.08, 1.15, 1.22, 1.3, 1.45];
+const MV = { vel: +localStorage.getItem("mino.velocita") || 1.15, giro: 0, stato: "spento", energia: 0, liscia: 0, rot: 0, onde: [], frasi: [], suona: false, finito: true, audio: null, sr: null, kokoro: null, breve: "" };
 const MV_SILENZIO = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 const mvAperto = () => !!document.getElementById("minoParla")?.classList.contains("open");
 const mvEl = (id) => document.getElementById(id);
@@ -2129,7 +2129,7 @@ function minoVoceApri(ascolta, testo) {                  // ascolta: parte già 
     el.querySelector("#mvConv").onclick = () => MINO_CASA.aConversazione();
     el.querySelector("#mvNucleo").onclick = mvTocco;
     const vel = el.querySelector("#mvVel"), scrivi = () => { vel.textContent = String(MV.vel).replace(".", ",") + "×"; };
-    vel.onclick = () => { MV.vel = MV_VELOCITA[(MV_VELOCITA.indexOf(MV.vel) + 1) % MV_VELOCITA.length] || 1.3; localStorage.setItem("mino.vel", MV.vel); scrivi(); toast(MV.vel <= 1 ? "Parlo con calma" : MV.vel >= 1.6 ? "Parlo molto svelto" : "Parlo più svelto"); };
+    vel.onclick = () => { MV.vel = MV_VELOCITA[(MV_VELOCITA.indexOf(MV.vel) + 1) % MV_VELOCITA.length] || 1.15; localStorage.setItem("mino.velocita", MV.vel); scrivi(); toast(MV.vel <= 1 ? "Parlo con calma" : MV.vel >= 1.45 ? "Parlo molto svelto" : "Velocità " + String(MV.vel).replace(".", ",") + "×"); };
     scrivi();
     const inp = el.querySelector("#mvIn"), manda = () => { const t = inp.value.trim(); if (!t) return; inp.value = ""; inp.style.height = ""; inp.blur(); mvManda(t, false); };
     el.querySelector("#mvForm").onsubmit = (e) => { e.preventDefault(); manda(); };
@@ -2192,9 +2192,11 @@ function mvTocco() {
   if (MV.stato === "ascolta" && MV.finisci) return MV.finisci();     // hai finito di parlare: manda subito quello che ha sentito
   mvAscolta();                                                       // a riposo: parla. Mentre pensa o parla: lo interrompi
 }
-// Un ascolto è UNA finestra (come in IRIS). Su Android il riconoscitore si chiude da solo alla prima pausa di chi parla: se ne
-// riapre subito un altro, e quello che ha già capito resta. A decidere che hai finito è un timer nostro: tanto silenzio
-// dopo l'ultima parola. Una pausa più corta (un respiro, un «e poi…») è ancora la stessa frase.
+// Un ascolto è UNA finestra. Il microfono si apre in modo continuo, così una pausa di chi parla non lo chiude; a decidere
+// che hai finito è un timer nostro: tanto silenzio dopo l'ultima parola (un respiro, un «e poi…» sono ancora la stessa frase).
+// Se il telefono lo chiude lo stesso A META' FRASE, se ne riapre un altro e quello che aveva capito resta. Se invece si
+// chiude mentre stai zitto non si riapre: Mino torna a riposo. Riaprirlo a ripetizione (come si faceva fino alla v1.54)
+// sul telefono si vede e si sente: il microfono che si accende e si spegne più volte.
 const MV_FINE_FRASE = 2200;                               // silenzio che vuol dire «ho finito»
 const MV_ATTESA = 9000;                                   // quanto aspetta che cominci a parlare (meno, se il microfono si è riaperto da solo)
 function mvAscolta(daSolo) {
@@ -2202,7 +2204,8 @@ function mvAscolta(daSolo) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { mvStato("riposo", "Qui il microfono non c'è"); mvEl("mvNota").textContent = "Su questo dispositivo non posso ascoltarti: scrivimi qui sotto."; return; }
   const pezzi = [];                                       // quello che hanno capito i riconoscitori già chiusi
-  let finale = "", parziale = "", fineAl = 0, timer = 0, chiuso = false, riavvii = 0, r = null;
+  let finale = "", parziale = "", fineAl = 0, timer = 0, chiuso = false, riavvii = 0, r = null, partito = 0;
+  const unisci = typeof dettato === "function" ? dettato : (x) => x.join(" ");        // in ascolto continuo Android ripete i pezzi: «dettato» li ricompone
   const testo = () => [...pezzi, finale, parziale].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   const arma = (ms) => { fineAl = Date.now() + ms; MV.scade = { inizio: Date.now(), durata: ms, parole: !!testo() }; clearTimeout(timer); timer = setTimeout(chiudi, ms); };
   const chiudi = () => {
@@ -2215,13 +2218,13 @@ function mvAscolta(daSolo) {
   };
   const avvia = () => {
     const q = new SR(); r = q; MV.sr = q;
-    q.lang = "it-IT"; q.interimResults = true; q.continuous = false;
+    q.lang = "it-IT"; q.interimResults = true; q.continuous = true; partito = Date.now();
     const mio = (f) => (e) => { if (r === q && !chiuso && g === MV.giro) f(e); };
     q.onspeechstart = mio(() => { if (fineAl - Date.now() < MV_FINE_FRASE) arma(MV_FINE_FRASE); });      // c'è voce: non chiudere adesso
     q.onresult = mio((e) => {
-      let f = "", p = "";
-      for (const x of e.results) { const t = x[0]?.transcript || ""; if (x.isFinal) f += " " + t; else p += " " + t; }
-      finale = f.trim(); parziale = p.trim();
+      const fermi = []; let p = "";
+      for (const x of e.results) { const t = x[0]?.transcript || ""; if (x.isFinal) fermi.push(t); else p += " " + t; }
+      finale = unisci(fermi).trim(); parziale = p.trim();
       mvEl("mvTu").textContent = testo(); MV.energia = Math.min(1, MV.energia + .45);
       arma(MV_FINE_FRASE);
     });
@@ -2235,7 +2238,9 @@ function mvAscolta(daSolo) {
       const qui = [finale, parziale].filter(Boolean).join(" "); if (qui) pezzi.push(qui);
       finale = parziale = "";
       if (chiuso || g !== MV.giro) return;
-      if (Date.now() < fineAl - 150 && riavvii < 30) { riavvii++; try { avvia(); return; } catch {} }      // chiuso dal telefono prima del tempo: si riapre
+      // chiuso dal telefono prima del tempo: si riapre solo se stavi già parlando (o se si è chiuso appena aperto, una volta)
+      const aMeta = pezzi.length > 0, subito = Date.now() - partito < 1200 && riavvii === 0;
+      if ((aMeta || subito) && Date.now() < fineAl - 150 && riavvii < 4) { riavvii++; try { avvia(); return; } catch {} }
       chiudi();
     };
     q.start();
