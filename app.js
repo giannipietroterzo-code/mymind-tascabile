@@ -409,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.57";
+const VERSIONE = "1.58";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -478,6 +478,14 @@ function pinPad({ titolo, sotto, onPin, extra = "" }) {
     <div class="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, "", 0, "⌫"].map((k) => k === "" ? "<span></span>" : `<button data-k="${k}">${k === "⌫" ? svg("left") : k}</button>`).join("")}</div>
     ${extra}</div>`;
   const dots = () => $("dots").querySelectorAll("i").forEach((d, i) => d.classList.toggle("on", i < pin.length));
+  // su un PC il PIN si scrive anche dalla tastiera (finché questa schermata è quella in vista)
+  const pad = $("app").querySelector(".pad"), tasti = (e) => {
+    if (!pad.isConnected) return document.removeEventListener("keydown", tasti);
+    if (e.target.closest?.("input, textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = /^\d$/.test(e.key) ? e.key : e.key === "Backspace" ? "⌫" : ""; if (!k) return;
+    e.preventDefault(); pad.querySelector(`[data-k="${k}"]`)?.click();
+  };
+  document.addEventListener("keydown", tasti);
   $("app").querySelectorAll("[data-k]").forEach((b) => b.onclick = async () => {
     if (b.dataset.k === "⌫") pin = pin.slice(0, -1);
     else if (pin.length < 6) pin += b.dataset.k;
@@ -494,20 +502,24 @@ function pinPad({ titolo, sotto, onPin, extra = "" }) {
   });
 }
 function creaPin(segreto) {
-  pinPad({ titolo: "Scegli un PIN", sotto: `Abbino «${esc(segreto.nome)}». Il PIN chiude la chiave sul telefono: senza, MyMind non si apre.`,
+  pinPad({ titolo: "Scegli un PIN", sotto: `Abbino «${esc(segreto.nome)}». Il PIN chiude la chiave su questo dispositivo: senza, MyMind non si apre.`,
     onPin: async (p1) => {
       pinPad({ titolo: "Ripetilo", sotto: "Lo stesso PIN, per sicurezza.", onPin: async (p2) => {
         if (p1 !== p2) { creaPin(segreto); toast("I due PIN non coincidono: rifallo", true); return; }
         await Cassa.chiudi(p1, segreto);
         await Busta.svuota(); await Busta.prepara(p1, segreto).catch(() => {});      // abbinamento nuovo: chiavi nuove
         await entra(segreto);
-        toast("Telefono abbinato");
+        toast(segreto.pc ? "PC collegato" : "Telefono abbinato");
       } });
     } });
 }
 function sblocca() {
   const c = Cassa.c();
-  pinPad({ titolo: "MyMind", sotto: `${esc(c?.nome || "Telefono")} · inserisci il PIN`, onPin: async (p) => { const sec = await Cassa.apri(p); await Busta.prepara(p, sec).catch(() => {}); entra(sec); },
+  pinPad({ titolo: "MyMind", sotto: `${esc(c?.nome || "Telefono")} · inserisci il PIN`, onPin: async (p) => {
+      const sec = await Cassa.apri(p);
+      if (sec.scade && sec.scade * 1000 < Date.now()) { Cassa.cancella(); Busta.svuota(); nessunAbbinamento(); toast("L'accesso a tempo di questo dispositivo è scaduto: serve un codice nuovo", true); return; }
+      await Busta.prepara(p, sec).catch(() => {}); entra(sec);
+    },
     extra: `${Busta.pronta() ? `<button class="lock-an" id="lockAnnota">${svg("edit")}<span><b>Annota senza sbloccare</b><small class="in-attesa"></small></span>${svg("mic")}</button>` : ""}<button class="link" id="dimentica">Ho dimenticato il PIN</button>` });
   if ($("lockAnnota")) { $("lockAnnota").onclick = (e) => annotaSheet({ detta: !!e.target.closest("svg:last-child") }); dipingiAttesa(); }
   $("dimentica").onclick = async () => {
@@ -519,7 +531,56 @@ function nessunAbbinamento() {
     <div class="lock-top"><div class="logo-big">${LOGO}</div><h1>MyMind tascabile</h1><p>Il tuo secondo cervello, dal telefono, ovunque sei. Cifrato dal telefono al Mac: chi sta in mezzo vede solo byte a caso.</p></div>
     <ol class="how"><li><span>1</span><div><b>Sul Mac</b> apri MyMind → Impostazioni → <b>Telefono, ovunque</b> → Abbina un telefono.</div></li>
       <li><span>2</span><div><b>Inquadra il QR</b> con la fotocamera di questo telefono.</div></li>
-      <li><span>3</span><div><b>Scegli un PIN</b> e installa l'app dal menu del browser («Aggiungi a schermata Home»).</div></li></ol></div>`;
+      <li><span>3</span><div><b>Scegli un PIN</b> e installa l'app dal menu del browser («Aggiungi a schermata Home»).</div></li></ol>
+    <form class="codice-box" id="codForm"><b>${svg("laptop")}Sei su un PC? Entra con un codice</b>
+      <small>Fallo dal telefono già abbinato (menu → <b>Collega un PC</b>) o dal Mac. Vale 10 minuti, una volta sola.</small>
+      <div><input id="codIn" placeholder="XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="14" inputmode="text"><button class="main" id="codVai">Entra</button></div>
+      <p id="codMsg"></p></form></div>`;
+  const inp = $("codIn"), msg = $("codMsg");
+  inp.oninput = () => { const v = inp.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12); inp.value = v.replace(/(.{4})(?=.)/g, "$1-"); msg.textContent = ""; msg.className = ""; };
+  $("codForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const codice = inp.value.replace(/-/g, "");
+    if (codice.length !== 12) { msg.textContent = "Il codice ha 12 caratteri."; msg.className = "bad"; return; }
+    $("codVai").disabled = true; msg.className = ""; msg.innerHTML = '<span class="spin"></span> Cerco il Mac…';
+    try { creaPin(await riscattaCodice(codice)); }
+    catch (err) { Tunnel.ferma(); if ($("codVai")) { $("codVai").disabled = false; msg.textContent = err.message; msg.className = "bad"; } }
+  };
+}
+// Dal codice si ricavano un canale e una chiave provvisori (lo stesso conto lo fa il Mac): lì si chiede una cosa sola, la
+// chiave vera di questo dispositivo, che arriva cifrata. Poi il canale provvisorio si butta.
+async function riscattaCodice(codice) {
+  const base = await crypto.subtle.importKey("raw", enc.encode(codice), "PBKDF2", false, ["deriveBits"]);
+  const d = new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", salt: enc.encode("mymind-invito-v1"), iterations: 600000, hash: "SHA-256" }, base, 384));
+  const u = (x) => b64(x).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  await Tunnel.avvia({ canale: "mi-" + u(d.subarray(0, 16)), chiave: u(d.subarray(16)), broker: {} });
+  const ua = navigator.userAgent, dove = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iPhone" : /Mac/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
+  const con = /Edg\//.test(ua) ? "Edge" : /Firefox/.test(ua) ? "Firefox" : /Chrome/.test(ua) ? "Chrome" : /Safari/.test(ua) ? "Safari" : "";
+  let r;
+  try { r = await Tunnel.json("POST", "tascabile/riscatta", { nome: ["PC", dove, con && "· " + con].filter(Boolean).join(" ") }, { attesa: 12e3 }); }
+  catch (e) { throw new Error(/non risponde|collegarmi/.test(e.message) ? "Nessuna risposta: il codice è sbagliato o scaduto, oppure il Mac è spento." : e.message); }
+  finally { Tunnel.ferma(); }
+  if (!r.canale || !r.chiave) throw new Error("risposta del Mac non valida");
+  return { canale: r.canale, chiave: r.chiave, broker: r.broker || {}, nome: r.nome || "PC", pc: true, scade: r.scade || null, abbinato: Date.now() };
+}
+// Dal telefono già abbinato: un codice per far entrare un PC, senza essere davanti al Mac.
+function collegaPc() {
+  const s = sheet(`<div class="pc-sh"><h3>${svg("laptop")}Collega un PC</h3>
+    <p>Sul PC apri <b>${esc(location.host + location.pathname)}</b> e scrivi il codice che ti do. Passa dallo stesso canale cifrato del telefono.</p>
+    <div class="pc-scelta"><button data-ore="12"><b>Non è mio</b><small>L'accesso scade da solo dopo 12 ore</small></button><button data-ore="0"><b>È un mio PC</b><small>Resta collegato finché non lo revochi dal Mac</small></button></div></div>`);
+  s.querySelectorAll("[data-ore]").forEach((b) => b.onclick = async () => {
+    const ore = +b.dataset.ore; s.querySelector(".pc-scelta").innerHTML = '<p class="vuoto"><span class="spin"></span></p>';
+    let r; try { r = await api("POST", "tascabile/invito", { ore }); } catch (e) { closeSheet(); toast(e.message, true); return; }
+    const box = s.querySelector(".pc-sh");
+    box.innerHTML = `<h3>${svg("laptop")}Scrivilo sul PC</h3><div class="pc-codice">${esc(r.codice)}</div>
+      <p id="pcResta"></p><p class="pc-nota">${ore ? "L'accesso di quel PC scade dopo " + ore + " ore." : "Quel PC resta collegato: lo revochi dal Mac, in Impostazioni → Telefono, ovunque."} Sul PC verrà chiesto anche un PIN.</p>`;
+    const tic = setInterval(() => {
+      const el = s.querySelector("#pcResta"); if (!el || !el.isConnected) return clearInterval(tic);
+      const resta = Math.round(r.scade - Date.now() / 1000);
+      el.textContent = resta > 0 ? `Vale ancora ${Math.floor(resta / 60)}:${String(resta % 60).padStart(2, "0")}, una volta sola.` : "Scaduto: fanne un altro.";
+      if (resta <= 0) { s.querySelector(".pc-codice")?.classList.add("scaduto"); clearInterval(tic); }
+    }, 500);
+  });
 }
 async function entra(segreto) {
   A.sec = segreto;
@@ -1045,11 +1106,13 @@ function menu() {
     <button data-m="diario">${svg("ws_calendario")}<span><b>Diario</b><small>Cosa hai fatto e deciso, giorno per giorno</small></span></button>
     <button data-m="stile">${svg("spark")}<span><b>Stile</b><small>${STILI[pref.stile || "atelier"][0]} · ${STILI[pref.stile || "atelier"][1]}</small></span></button>
     <button data-m="tema">${svg(document.documentElement.dataset.theme === "dark" ? "sun" : "moon")}<span><b>Tema</b><small>${{ auto: "Come il telefono", light: "Chiaro", dark: "Scuro" }[pref.tema]}</small></span></button>
+    ${A.sec?.scade ? "" : `<button data-m="pc">${svg("laptop")}<span><b>Collega un PC</b><small>Un codice a tempo per entrare da un computer, ovunque</small></span></button>`}
     <button data-m="blocca">${svg("key")}<span><b>Blocca adesso</b><small>Al prossimo avvio serve il PIN</small></span></button>
     <button data-m="pin">${svg("edit")}<span><b>Cambia PIN</b><small>La chiave resta la stessa</small></span></button>
     <button data-m="via" class="danger">${svg("trash")}<span><b>Dimentica questo telefono</b><small>Cancella la chiave da qui. Sul Mac revocalo in Impostazioni.</small></span></button></div>`);
   s.querySelector('[data-m="tema"]').onclick = () => { pref.tema = { auto: "light", light: "dark", dark: "auto" }[pref.tema]; savePref(); applicaTema(); closeSheet(); };
   s.querySelector('[data-m="blocca"]').onclick = () => { closeSheet(); blocca(); };
+  if (s.querySelector('[data-m="pc"]')) s.querySelector('[data-m="pc"]').onclick = () => collegaPc();
   s.querySelector('[data-m="diario"]').onclick = () => diarioSheet();
   s.querySelector('[data-m="stile"]').onclick = () => { pref.stile = pref.stile === "tech" ? "atelier" : "tech"; savePref(); applicaTema(); closeSheet(); toast("Stile " + STILI[pref.stile][0]); };
   s.querySelector('[data-m="pin"]').onclick = () => { closeSheet(); const sec = A.sec; pinPad({ titolo: "Nuovo PIN", sotto: "Sei cifre.", onPin: async (p) => { await Cassa.chiudi(p, sec); toast("PIN cambiato"); casa(); } }); };

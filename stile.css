@@ -827,3 +827,22 @@ body.mino-aperto #minoBtn, body:has(.lock) #minoBtn { display: none; }
 #mvOrecchio[hidden] { display: none; }
 #mvOrecchio u { color: var(--m-acc, #f5c518); text-decoration: none; font-weight: 700; }
 #mvOrecchio:active { opacity: .7; }
+
+/* entrare da un PC con un codice a tempo */
+.codice-box { width: 100%; max-width: 360px; margin: 26px auto 0; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); text-align: left; display: grid; gap: 8px; }
+.codice-box > b { display: flex; align-items: center; gap: 8px; font-size: 15px; } .codice-box > b svg { color: var(--ws); flex: none; }
+.codice-box small { color: var(--muted); font-size: 13px; line-height: 1.45; }
+.codice-box > div { display: flex; gap: 8px; margin-top: 4px; }
+.codice-box input { flex: 1; min-width: 0; height: 46px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--text); font: 600 17px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; outline: 0; }
+.codice-box input:focus { border-color: var(--ws); } .codice-box input::placeholder { color: var(--muted); opacity: .45; }
+.codice-box button { height: 46px; padding: 0 18px; border-radius: 12px; font-weight: 700; } .codice-box button:disabled { opacity: .5; }
+.codice-box p { margin: 0; min-height: 18px; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; } .codice-box p.bad { color: var(--bad); }
+.pc-sh { padding: 4px 4px 10px; } .pc-sh h3 { display: flex; align-items: center; gap: 9px; margin: 0 0 8px; font-size: 18px; } .pc-sh h3 svg { color: var(--ws); }
+.pc-sh p { margin: 0 0 14px; color: var(--muted); font-size: 14.5px; line-height: 1.5; } .pc-sh p b { color: var(--text); word-break: break-all; }
+.pc-scelta { display: grid; gap: 10px; }
+.pc-scelta button { display: grid; gap: 3px; text-align: left; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text); }
+.pc-scelta button:active { border-color: var(--ws); } .pc-scelta small { color: var(--muted); font-size: 13px; }
+.pc-codice { margin: 6px 0 12px; padding: 18px 8px; border-radius: 16px; border: 1px dashed var(--ws); background: var(--panel); text-align: center; font: 700 clamp(22px, 7vw, 30px)/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .1em; color: var(--text); user-select: all; }
+.pc-codice.scaduto { opacity: .35; text-decoration: line-through; border-color: var(--line); }
+.pc-sh #pcResta { text-align: center; color: var(--text); font-weight: 600; margin-bottom: 8px; } .pc-sh .pc-nota { font-size: 13px; margin: 0; text-align: center; }
+.codice-box button { background: var(--ws); color: var(--on-ws); border: 0; }
