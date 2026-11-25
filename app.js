@@ -409,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.58";
+const VERSIONE = "1.59";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -613,10 +613,13 @@ function blocca() {
   blobs.forEach((u) => URL.revokeObjectURL(u)); blobs.clear();
   sblocca();
 }
-// dopo 5 minuti in sottofondo l'app si richiude: chi prende il telefono sbloccato non trova MyMind aperto
+// Quanto può restare in sottofondo prima di richiedere il PIN. Sul telefono 5 minuti (lo si perde, lo si presta). Su un PC
+// la scheda finisce in sottofondo ogni volta che si guarda un'altra pagina: 4 ore se è tuo, 30 minuti se non lo è.
+const riposoMax = () => (!A.sec?.pc ? 5 : A.sec.scade ? 30 : 240) * 60e3;
+// dopo quel tempo in sottofondo l'app si richiude: chi prende il dispositivo sbloccato non trova MyMind aperto
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) { A.nascosto = Date.now(); return; }
-  if (A.sec && A.nascosto && Date.now() - A.nascosto > 5 * 60e3 && !A.busy) blocca();
+  if (A.sec && A.nascosto && Date.now() - A.nascosto > riposoMax() && !A.busy) blocca();
   controllaVersione();
   risalvaTutto(); ricaricaChats();
 });
