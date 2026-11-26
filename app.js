@@ -409,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.60";
+const VERSIONE = "1.61";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -1389,6 +1389,8 @@ function zoom(src) { sheet(`<img class="zoom" src="${esc(src)}" alt="">`, "full"
 // ================================================================ il riquadro per scrivere
 function disegnaComposer() {
   const c = $("composer"); if (!c) return;
+  // si ridisegna a fine risposta (anche con Stop): quello che stavi scrivendo intanto resta, col cursore dov'era
+  const prima = $("input"), scritto = prima?.value || "", cur = prima ? [prima.selectionStart, prima.selectionEnd] : null, aFuoco = prima && document.activeElement === prima;
   c.innerHTML = `<div class="comp">
     ${A.pins.length || A.foto.length ? `<div class="att">${A.pins.map((p, k) => `<span class="pin">${svg(TIPO_IC[p.tipo] || "file")}${esc(p.nome)}<button data-xp="${k}">${svg("x")}</button></span>`).join("")}${A.foto.map((f, k) => `<span class="ph"><img src="${f.url}" alt=""><button data-xf="${k}">${svg("x")}</button></span>`).join("")}</div>` : ""}
     <div class="box"><button class="ib" id="cam" aria-label="Scatta una foto">${svg("camera")}</button><button class="ib" id="clip" aria-label="Foto dalla galleria">${svg("image")}</button>
@@ -1396,6 +1398,7 @@ function disegnaComposer() {
       <button class="ib main" id="send" aria-label="Invia">${svg(A.busy ? "stop" : "up")}</button></div>
     <input type="file" id="pick" accept="image/*" multiple hidden><input type="file" id="scatto" accept="image/*" capture="environment" hidden></div>`;
   const inp = $("input");
+  if (scritto) { inp.value = scritto; if (cur) inp.setSelectionRange(...cur); }
   inp.oninput = autosize;
   campoConFonti(inp, () => A.pins, (p) => {             // l'etichetta è sparita dal testo: la fonte si stacca
     A.pins = A.pins.filter((x) => x !== p);
@@ -1408,6 +1411,7 @@ function disegnaComposer() {
   for (const id of ["pick", "scatto"]) $(id).onchange = async () => { for (const f of $(id).files) A.foto.push(await toJpeg(f)); disegnaComposer(); $("input").focus(); };
   c.querySelectorAll("[data-xp]").forEach((b) => b.onclick = () => { const testo = togliCitazione($("input").value, A.pins[+b.dataset.xp].nome); A.pins.splice(+b.dataset.xp, 1); disegnaComposer(); $("input").value = testo; autosize(); });
   c.querySelectorAll("[data-xf]").forEach((b) => b.onclick = () => { A.foto.splice(+b.dataset.xf, 1); disegnaComposer(); });
+  if (scritto) { autosize(); inp._specchio?.agg(); if (aFuoco) inp.focus(); }
 }
 function autosize() { const t = $("input"); if (!t) return; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; t._specchio?.agg(); }
 async function toJpeg(file, lato = 1600) {
