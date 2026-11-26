@@ -846,3 +846,7 @@ body.mino-aperto #minoBtn, body:has(.lock) #minoBtn { display: none; }
 .pc-codice.scaduto { opacity: .35; text-decoration: line-through; border-color: var(--line); }
 .pc-sh #pcResta { text-align: center; color: var(--text); font-weight: 600; margin-bottom: 8px; } .pc-sh .pc-nota { font-size: 13px; margin: 0; text-align: center; }
 .codice-box button { background: var(--ws); color: var(--on-ws); border: 0; }
+
+/* chi risponde è Mino: al posto della nuvola il suo logo */
+.who .av.mino { background: none; width: 22px; height: 22px; }
+.who .av.mino svg { width: 22px; height: 22px; display: block; }

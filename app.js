@@ -409,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.59";
+const VERSIONE = "1.60";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -1318,7 +1318,7 @@ function msgHtml(m, i) {
   const st = m.stats, costo = st?.costo ? ` · ${st.costo < 0.01 ? "<1 cent" : fmt(st.costo * 100, 1) + " cent"}` : "";
   const tags = [m.fonti?.length || m.nota ? `${m.fonti?.length || 0} fonti${m.nota ? " + nota" : ""}` : "", m.usaWeb ? "web" : ""].filter(Boolean).join(" · ");
   return `<div class="msg b${live ? " live" : ""}" data-i="${i}">
-    <div class="who"><span class="av"${pc(m.model)}>${svg("cloud")}</span><b>${esc(shortName(m.model))}</b>${tags ? `<small>${tags}</small>` : ""}</div>
+    <div class="who"><span class="av mino">${LOGO}</span><b>${esc(shortName(m.model))}</b>${tags ? `<small>${tags}</small>` : ""}</div>
     <div class="md">${body}</div>${web ? `<div class="wsrcs">${web}</div>` : ""}${notaAutoHtml(m, i)}${m.rimandi?.length && !live ? `<div class="rimandi">${m.rimandi.map((r) => `<button data-sapere="${esc(r.x)}" style="--c:${esc(r.colore || "#999")}"><i></i><span><b>C'entra con «${esc(r.nome)}»</b>${esc(r.perche)}</span>${svg("right")}</button>`).join("")}</div>` : ""}
     ${live ? "" : `<div class="mfoot"><button data-copy="${i}">${svg("copy")}</button>${i === A.chat.messages.length - 1 ? `<button data-redo>${svg("redo")}Rigenera</button>` : ""}<span>${st?.eval_count ? `${st.prompt_eval_count ? pesoHtml(st) + " · " : ""}${kTok(st.eval_count)} scritti${costo}` : ""}</span></div>`}</div>`;
 }
