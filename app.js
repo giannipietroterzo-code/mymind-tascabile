@@ -409,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.61";
+const VERSIONE = "1.62";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -2338,7 +2338,7 @@ async function mvAscoltaCasa(daSolo, g) {
     lascia();
   };
   const manda = (come) => {                               // la frase com'è adesso → le parole
-    const q = { id: chi, n: ++n, come, tipo: (tipo.split(";")[0].split("/")[1] || "audio"), fondo: fondo.toFixed(4), soglia: soglia.toFixed(4), picco: picco.toFixed(3), voce_ms: String(primaVoce ? ultimaVoce - primaVoce : 0) };
+    const q = { id: chi, n: ++n, come, tipo: (tipo.split(";")[0].split("/")[1] || "audio"), fondo: fondo.toFixed(4), soglia: soglia.toFixed(4), picco: picco.toFixed(3), voce_ms: String(primaVoce ? ultimaVoce - primaVoce : 0), ws: MINO_CASA.dove()?.ws || "" };
     return MINO_CASA.ascolta(new Blob(pezzi, { type: tipo || "audio/webm" }), q);
   };
   const fine = async (come) => {
