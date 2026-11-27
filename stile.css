@@ -850,3 +850,7 @@ body.mino-aperto #minoBtn, body:has(.lock) #minoBtn { display: none; }
 /* chi risponde è Mino: al posto della nuvola il suo logo */
 .who .av.mino { background: none; width: 22px; height: 22px; }
 .who .av.mino svg { width: 22px; height: 22px; display: block; }
+
+/* il microfono si sta aprendo: il nucleo aspetta, ancora spento, finché non si può parlare davvero */
+#minoParla[data-pronto="0"] #mvEtichetta { color: var(--muted); }
+#minoParla[data-pronto="0"] #mvNucleo canvas { opacity: .45; transition: opacity .25s; }

@@ -409,7 +409,7 @@ const WEB_RE = /\b(cerca|cercami|guarda|controlla)\b.{0,30}\b(web|internet|onlin
 // ---------------------------------------------------------------- versione e aggiornamento automatico
 // strumenti/pubblica-tascabile.sh alza VERSIONE qui, in versione.json e in sw.js. L'app confronta la sua con quella pubblicata:
 // se è bloccata si ricarica subito; se è aperta non ti chiede il PIN a metà lavoro, aspetta il prossimo blocco (o un tocco).
-const VERSIONE = "1.62";
+const VERSIONE = "1.63";
 let nuovaVersione = null;
 async function controllaVersione() {
   if (location.protocol !== "https:" && !/^localhost$|^127\./.test(location.hostname)) return;
@@ -2305,7 +2305,8 @@ function mvOrecchio() {                                   // chi capisce le paro
 }
 async function mvAscolta(daSolo) {
   mvFerma(); const g = MV.giro;
-  mvStato("ascolta", "Ti ascolto"); mvEl("mvTu").textContent = ""; mvEl("mvProp").innerHTML = "";
+  mvStato("ascolta", "Apro il microfono…"); mvEl("mvTu").textContent = ""; mvEl("mvProp").innerHTML = "";
+  mvEl("minoParla")?.setAttribute("data-pronto", "0");
   if (MV.orecchio == null && MV.capacita) await Promise.race([MV.capacita, new Promise((r) => setTimeout(r, 1500))]);
   if (g !== MV.giro) return;
   if (MV.modo !== "chrome" && mvPuoCasa()) return mvAscoltaCasa(daSolo, g);
@@ -2327,8 +2328,8 @@ async function mvAscoltaCasa(daSolo, g) {
     rec = new MediaRecorder(flusso, tipo ? { mimeType: tipo, audioBitsPerSecond: 32000 } : {});
     MV.ctx.resume?.(); fonte = MV.ctx.createMediaStreamSource(flusso); an = MV.ctx.createAnalyser(); an.fftSize = 2048; fonte.connect(an);
   } catch { lascia(); MV.orecchio = false; return mvAscoltaChrome(daSolo); }
-  const pezzi = [], buf = new Float32Array(an.fftSize), chi = Math.random().toString(36).slice(2, 10), aperto = Date.now(), attesa = daSolo ? 7000 : MV_ATTESA;
-  let chiuso = false, parlato = false, ultimaVoce = 0, primaVoce = 0, caldo = 0, fondo = 0, soglia = .012, picco = 0, n = 0, anticipo = null, tic = 0;
+  const pezzi = [], buf = new Float32Array(an.fftSize), chi = Math.random().toString(36).slice(2, 10), attesa = daSolo ? 7000 : MV_ATTESA;
+  let aperto = Date.now(), pronto = false, chiuso = false, parlato = false, ultimaVoce = 0, primaVoce = 0, caldo = 0, fondo = 0, soglia = .012, picco = 0, n = 0, anticipo = null, tic = 0;
   rec.ondataavailable = (e) => { if (e.data?.size) pezzi.push(e.data); };
   const fermo = new Promise((ok) => { rec.onstop = ok; rec.onerror = ok; });
   const via = () => {                                     // tutto spento: il microfono è libero
@@ -2342,7 +2343,8 @@ async function mvAscoltaCasa(daSolo, g) {
     return MINO_CASA.ascolta(new Blob(pezzi, { type: tipo || "audio/webm" }), q);
   };
   const fine = async (come) => {
-    if (chiuso) return; chiuso = true; MV.scade = null; MV.finisci = null; MV.mic = null;
+    if (chiuso) return;
+    mvEl("minoParla")?.setAttribute("data-pronto", "1"); chiuso = true; MV.scade = null; MV.finisci = null; MV.mic = null;
     const pronto = anticipo;                              // vale: dopo quella pausa non hai più detto niente
     clearInterval(tic);
     try { if (rec.state !== "inactive") rec.stop(); } catch {}
@@ -2368,6 +2370,10 @@ async function mvAscoltaCasa(daSolo, g) {
     if (chiuso || g !== MV.giro) return via();
     an.getFloatTimeDomainData(buf); let q = 0; for (const v of buf) q += v * v;
     const liv = Math.sqrt(q / buf.length), ora = Date.now();
+    if (!pronto) {                                        // il microfono è davvero aperto: adesso si può parlare
+      if (rec.state !== "recording" || liv < 1e-6) { aperto = ora; MV.scade = null; return; }
+      pronto = true; aperto = ora; mvStato("ascolta", "Ti ascolto"); mvEl("minoParla")?.setAttribute("data-pronto", "1"); navigator.vibrate?.(10);
+    }
     // il rumore di fondo: scende subito, sale piano (così la tua voce non lo alza). La voce è quello che lo supera di netto.
     fondo = !fondo ? liv : liv < fondo ? fondo * .6 + liv * .4 : fondo + (liv - fondo) * .003;
     soglia = Math.max(.012, fondo * 3 + .004); picco = Math.max(picco, liv);
@@ -2395,7 +2401,7 @@ async function mvAscoltaCasa(daSolo, g) {
   MV.mic = { via: () => { chiuso = true; via(); } };
   MV.finisci = () => fine("tocco");
   MV.scade = { inizio: aperto, durata: attesa, parole: false };
-  try { rec.start(200); navigator.vibrate?.(10); } catch { chiuso = true; via(); MV.mic = null; MV.orecchio = false; return mvAscoltaChrome(daSolo); }
+  try { rec.start(200); } catch { chiuso = true; via(); MV.mic = null; MV.orecchio = false; return mvAscoltaChrome(daSolo); }
 }
 // Il riconoscimento di Chrome, di riserva (un Mac senza trascrizione, un browser senza registratore). Un ascolto è UNA
 // finestra: il microfono si apre in modo continuo e a decidere che hai finito è un timer nostro. Se il telefono lo chiude
